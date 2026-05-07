@@ -7,8 +7,8 @@ import plotly.graph_objects as go
 
 st.set_page_config(page_title="送花数据分析看板", page_icon="🌸", layout="wide")
 
-# 自动刷新页面（每60秒）
-st.markdown('<meta http-equiv="refresh" content="60">', unsafe_allow_html=True)
+# 自动刷新页面（每10秒）
+st.markdown('<meta http-equiv="refresh" content="10">', unsafe_allow_html=True)
 
 # ==================== 水印 ====================
 watermark_text = "陈浚铭四代第一门面"
@@ -74,7 +74,6 @@ COLOR_MAP = {
 DEFAULT_COLOR = "#888888"
 API_URL = "http://47.109.181.0/api/data"
 
-# 解析函数
 def smart_find_list(obj):
     if isinstance(obj, list):
         return obj
@@ -129,7 +128,7 @@ def auto_map_columns(df):
                 df_renamed = df_renamed[keep_cols]
     return df_renamed
 
-@st.cache_data(ttl=60)   # 数据缓存60秒
+@st.cache_data(ttl=10)   # 数据缓存10秒
 def load_data():
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
@@ -171,7 +170,7 @@ def load_data():
 
 # ==================== 界面 ====================
 st.title("🌸 百度送花数据实时看板")
-st.caption(f"缓存：60秒 | 自动刷新：60秒 | 全屏水印：“{watermark_text}”")
+st.caption(f"缓存：10秒 | 自动刷新：10秒 | 全屏水印：“{watermark_text}”")
 
 with st.spinner("加载中..."):
     df, data_time, time_source, error = load_data()
@@ -189,24 +188,93 @@ if data_time:
     else:
         st.info(f"📅 数据获取时间（本地）：{data_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
-# 表格
-st.subheader("🏆 送花排行榜（按今日送花降序）")
-df_display = df.copy()
-df_display.insert(0, "排名", range(1, len(df_display) + 1))
-base_cols = ["排名", "姓名", "今日送花", "今日总人数"]
-extra_cols = []
-if "今日增量人数" in df_display.columns:
-    extra_cols.append("今日增量人数")
-if "今日增量送花" in df_display.columns:
-    extra_cols.append("今日增量送花")
-extra_cols.append("人均送花")
-if "历史总数" in df_display.columns:
-    extra_cols.append("历史总数")
-display_cols = base_cols + extra_cols
-html_table = df_display[display_cols].to_html(index=False)
-st.markdown(html_table, unsafe_allow_html=True)
+# ==================== 卡片式排行榜 ====================
+st.subheader("🏆 送花排行榜")
+st.markdown("""
+<style>
+.rank-card {
+    background: white;
+    border-radius: 12px;
+    padding: 12px 16px;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    transition: all 0.2s;
+}
+.rank-card:hover {
+    background: #fafafa;
+}
+.rank-main {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.rank-name {
+    font-size: 1.3rem;
+    font-weight: bold;
+    color: #1e2a3a;
+    min-width: 100px;
+}
+.rank-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    font-size: 0.9rem;
+}
+.rank-stats span {
+    background: #f0f2f6;
+    padding: 4px 10px;
+    border-radius: 20px;
+}
+.rank-sub {
+    margin-top: 8px;
+    font-size: 0.8rem;
+    color: #5a6e85;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    border-top: 1px dashed #e2e8f0;
+    padding-top: 8px;
+}
+</style>
+""", unsafe_allow_html=True)
 
-# 折线图（强制显示所有日期）
+for idx, row in df.iterrows():
+    name = row["姓名"]
+    today = int(row["今日送花"])
+    people = int(row["今日总人数"])
+    avg = row["人均送花"]
+    total_history = int(row["历史总数"]) if "历史总数" in row else 0
+    delta_gift = int(row["今日增量送花"]) if "今日增量送花" in row else 0
+    delta_people = int(row["今日增量人数"]) if "今日增量人数" in row else 0
+
+    today_fmt = f"{today:,}"
+    people_fmt = f"{people:,}"
+    total_fmt = f"{total_history:,}"
+    delta_gift_fmt = f"{delta_gift:,}"
+    delta_people_fmt = f"{delta_people:,}"
+
+    card_html = f"""
+    <div class="rank-card">
+        <div class="rank-main">
+            <div class="rank-name">{name}</div>
+            <div class="rank-stats">
+                <span>🌸 {today_fmt}</span>
+                <span>👥 {people_fmt}</span>
+                <span>📊 人均 {avg}</span>
+            </div>
+        </div>
+        <div class="rank-sub">
+            <span>📜 历史总数 {total_fmt}</span>
+            <span>📈 增量送花 {delta_gift_fmt}</span>
+            <span>👤 增量人数 {delta_people_fmt}</span>
+        </div>
+    </div>
+    """
+    st.markdown(card_html, unsafe_allow_html=True)
+
+# ==================== 折线图 ====================
 st.subheader("📈 近7日送花趋势对比")
 trend_col = "趋势" if "趋势" in df.columns else ("trend" if "trend" in df.columns else None)
 
@@ -257,7 +325,7 @@ if trend_col:
             legend=dict(
                 bgcolor='rgba(0,0,0,0)',
                 bordercolor='rgba(0,0,0,0)',
-                title=None,# ← 删除折线图自带的标题
+                title=None,
                 font=dict(color='black', size=10),
                 orientation='h',
                 yanchor='bottom',
@@ -265,7 +333,6 @@ if trend_col:
                 xanchor='center',
                 x=0.5
             ),
-        
             xaxis_title="日期",
             yaxis_title="送花数量",
             plot_bgcolor='rgba(0,0,0,0)',
@@ -278,7 +345,7 @@ if trend_col:
 else:
     st.info("当前数据不含趋势字段")
 
-# 柱状图
+# ==================== 柱状图 ====================
 st.subheader("📊 今日送花排行柱状图（按送花数量排序）")
 df_chart = df.sort_values("今日送花", ascending=False).reset_index(drop=True)
 bar_colors = [COLOR_MAP.get(name, DEFAULT_COLOR) for name in df_chart["姓名"]]
@@ -295,4 +362,4 @@ plt.tight_layout()
 st.pyplot(fig)
 
 st.markdown("---")
-st.caption("💡 页面每60秒自动刷新，数据缓存60秒。数据源更新后，网页最晚60秒内自动显示最新数据。")
+st.caption("💡 页面每10秒自动刷新，数据缓存10秒。数据源更新后，最晚10秒内自动显示最新数据。")
