@@ -4,17 +4,14 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import datetime
 import plotly.graph_objects as go
+import matplotlib.patches as mpatches
 
 # ==================== 配置区域 ====================
-# 页面自动刷新间隔（秒）: 建议 ≤ 30，数据源每5分钟更新一次，30秒刷新对服务器压力很小
 AUTO_REFRESH_SECONDS = 30
-# 数据缓存时间（秒）: 建议比页面刷新间隔略小，确保每次刷新时缓存过期，从而获取最新数据
 CACHE_TTL_SECONDS = 25
 # ================================================
 
 st.set_page_config(page_title="送花数据分析看板", page_icon="🌸", layout="wide")
-
-# 自动刷新页面（使用配置的秒数）
 st.markdown(f'<meta http-equiv="refresh" content="{AUTO_REFRESH_SECONDS}">', unsafe_allow_html=True)
 
 # ==================== 水印 ====================
@@ -198,14 +195,13 @@ if data_time:
 # ==================== 卡片式排行榜（对齐版本，带表头） ====================
 st.subheader("🏆 送花排行榜")
 
-# 自定义 CSS：实现两行四列对齐
 st.markdown("""
 <style>
 .rank-card {
     background: white;
     border-radius: 12px;
     padding: 12px 16px;
-    margin-bottom: 12px;
+    margin-bottom: 8px;   /* 调整卡片间距，原为12px，现改为8px缩小间隙 */
     box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     transition: all 0.2s;
 }
@@ -214,7 +210,7 @@ st.markdown("""
 }
 .rank-row {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr 1fr;  /* 四列等宽 */
+    grid-template-columns: 1fr 1fr 1fr 1fr;
     align-items: center;
     gap: 8px;
     margin-bottom: 4px;
@@ -241,7 +237,6 @@ st.markdown("""
     color: #10b981;
     font-weight: 500;
 }
-/* 表头样式 */
 .rank-header {
     background: #f1f5f9;
     border-radius: 12px;
@@ -251,7 +246,6 @@ st.markdown("""
     color: #0f172a;
     border: 1px solid #e2e8f0;
 }
-/* 手机屏幕适配：列宽自动，不堆叠 */
 @media (max-width: 640px) {
     .rank-row {
         grid-template-columns: 1fr 1fr 1fr 1fr;
@@ -271,7 +265,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 表头行（列名）
+# 表头
 st.markdown("""
 <div class="rank-header">
     <div class="rank-row" style="margin-bottom:0;">
@@ -283,7 +277,6 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# 循环生成每个明星的卡片
 for _, row in df.iterrows():
     name = row["姓名"]
     today = int(row["今日送花"])
@@ -315,7 +308,9 @@ for _, row in df.iterrows():
         </div>
     </div>
     """
-    st.markdown(card_html, unsafe_allow_html=True)# ==================== 折线图 ====================
+    st.markdown(card_html, unsafe_allow_html=True)
+
+# ==================== 折线图 ====================
 st.subheader("📈 近7日送花趋势对比")
 trend_col = "趋势" if "趋势" in df.columns else ("trend" if "trend" in df.columns else None)
 
@@ -351,33 +346,13 @@ if trend_col:
                 line=dict(color=color, width=2),
                 marker=dict(size=4)
             ))
-        fig.update_xaxes(
-            tickvals=all_dates,
-            ticktext=all_dates,
-            tickangle=0,
-            fixedrange=True,
-            showgrid=True,
-            gridcolor='lightgray'
-        )
+        fig.update_xaxes(tickvals=all_dates, ticktext=all_dates, tickangle=0, fixedrange=True, showgrid=True, gridcolor='lightgray')
         fig.update_yaxes(fixedrange=True, showgrid=True, gridcolor='lightgray')
         fig.update_layout(
-            autosize=True,
-            margin=dict(l=20, r=20, t=40, b=40),
-            legend=dict(
-                bgcolor='rgba(0,0,0,0)',
-                bordercolor='rgba(0,0,0,0)',
-                title=None,
-                font=dict(color='black', size=10),
-                orientation='h',
-                yanchor='bottom',
-                y=1.02,
-                xanchor='center',
-                x=0.5
-            ),
-            xaxis_title="日期",
-            yaxis_title="送花数量",
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)'
+            autosize=True, margin=dict(l=20, r=20, t=40, b=40),
+            legend=dict(bgcolor='rgba(0,0,0,0)', bordercolor='rgba(0,0,0,0)', title=None, font=dict(color='black', size=10), orientation='h', yanchor='bottom', y=1.02, xanchor='center', x=0.5),
+            xaxis_title="日期", yaxis_title="送花数量",
+            plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)'
         )
         config = {'displayModeBar': False, 'scrollZoom': False}
         st.plotly_chart(fig, use_container_width=True, config=config)
@@ -386,10 +361,11 @@ if trend_col:
 else:
     st.info("当前数据不含趋势字段")
 
-# ==================== 柱状图 ====================
+# ==================== 柱状图（带颜色图例） ====================
 st.subheader("📊 今日送花排行柱状图（按送花数量排序）")
 df_chart = df.sort_values("今日送花", ascending=False).reset_index(drop=True)
 bar_colors = [COLOR_MAP.get(name, DEFAULT_COLOR) for name in df_chart["姓名"]]
+
 fig_width = max(8, len(df_chart) * 0.6)
 fig, ax = plt.subplots(figsize=(fig_width, 6))
 bars = ax.bar(df_chart["姓名"], df_chart["今日送花"], color=bar_colors)
@@ -399,8 +375,16 @@ ax.set_xticklabels(df_chart["姓名"], rotation=45, ha='right', fontsize=10)
 ax.set_xlabel("明星")
 ax.set_ylabel("送花数量")
 ax.set_title("今日送花排行榜")
+
+# 添加颜色图例：为每个姓名生成一个色块图例
+legend_patches = []
+for name in df_chart["姓名"]:
+    color = COLOR_MAP.get(name, DEFAULT_COLOR)
+    legend_patches.append(mpatches.Patch(color=color, label=name))
+ax.legend(handles=legend_patches, loc='upper left', bbox_to_anchor=(1.02, 1), title="明星颜色", fontsize=8)
+
 plt.tight_layout()
 st.pyplot(fig)
 
 st.markdown("---")
-st.caption(f"💡 页面每 {AUTO_REFRESH_SECONDS} 秒自动刷新，数据缓存 {CACHE_TTL_SECONDS} 秒。数据源更新后最晚 {AUTO_REFRESH_SECONDS} 秒内同步显示。")
+st.caption(f"💡 页面每 {AUTO_REFRESH_SECONDS} 秒自动刷新，数据缓存 {CACHE_TTL_SECONDS} 秒。柱状图右侧图例显示各明星对应颜色。")
