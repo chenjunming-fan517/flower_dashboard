@@ -7,7 +7,10 @@ from datetime import datetime
 # ==================== 页面配置 ====================
 st.set_page_config(page_title="送花数据分析看板", page_icon="🌸", layout="wide")
 
-# ==================== 全屏平铺水印（高可见度版） ====================
+# ==================== 自动刷新（每300秒 = 5分钟） ====================
+st.markdown('<meta http-equiv="refresh" content="300">', unsafe_allow_html=True)
+
+# ==================== 全屏平铺水印 ====================
 watermark_text = "陈浚铭四代第一门面"
 watermark_css = f"""
 <style>
@@ -23,34 +26,30 @@ watermark_css = f"""
     grid-template-columns: repeat(auto-fill, minmax(220px, 260px));
     justify-content: center;
     align-items: center;
-    opacity: 0.35;           /* 提高透明度，更明显 */
+    opacity: 0.22;
     transform: rotate(-20deg);
-    background-color: transparent;
 }}
 .watermark-item {{
-    font-size: 26px;         /* 稍大一点 */
+    font-size: 22px;
     font-weight: bold;
-    color: #6c6c6c;          /* 深灰色，更清晰 */
+    color: #aaa;
     font-family: 'Microsoft YaHei', sans-serif;
     white-space: nowrap;
     text-align: center;
     padding: 30px 0;
     user-select: none;
-    text-shadow: 1px 1px 0 rgba(255,255,255,0.5);
 }}
 </style>
-<div class="watermark-layer" id="watermark-layer"></div>
+<div class="watermark-layer"></div>
 <script>
     (function() {{
-        const layer = document.getElementById('watermark-layer');
+        const layer = document.querySelector('.watermark-layer');
         if (!layer) return;
-        // 清空已有内容，避免重复添加（Streamlit 热重载可能导致重复）
-        layer.innerHTML = '';
         const itemWidth = 240;
-        const itemHeight = 90;
+        const itemHeight = 80;
         const cols = Math.ceil(window.innerWidth / itemWidth) + 1;
         const rows = Math.ceil(window.innerHeight / itemHeight) + 1;
-        const total = Math.max(cols * rows, 30); // 至少30个
+        const total = cols * rows;
         for (let i = 0; i < total; i++) {{
             const div = document.createElement('div');
             div.className = 'watermark-item';
@@ -77,15 +76,19 @@ DEFAULT_COLOR = "#888888"
 # ==================== 数据接口 ====================
 API_URL = "http://47.109.181.0/api/data"
 
-# ==================== 数据加载 ====================
+# ==================== 数据加载函数（返回df和获取时间） ====================
 @st.cache_data(ttl=300)
 def load_data():
+    """
+    获取数据，返回 (DataFrame, 数据获取时间)
+    """
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
         resp = requests.get(API_URL, timeout=10, headers=headers)
         resp.raise_for_status()
         raw = resp.json()
 
+        # 提取列表数据
         data_list = None
         if isinstance(raw, list):
             data_list = raw
@@ -105,6 +108,7 @@ def load_data():
 
         df = pd.DataFrame(data_list)
 
+        # 字段映射
         column_mapping = {
             "name": "姓名",
             "today_gift": "今日送花",
@@ -126,34 +130,44 @@ def load_data():
                 df["今日送花"] = 0
 
         df = df.sort_values("今日送花", ascending=False).reset_index(drop=True)
-        return df
+
+        # 记录数据获取的时间（即数据“生成”时间）
+        data_time = datetime.now()
+
+        return df, data_time
 
     except Exception as e:
         st.error(f"❌ 数据加载失败：{e}")
-        return pd.DataFrame()
+        return pd.DataFrame(), None
 
 # ==================== UI 布局 ====================
 st.title("🌸 百度送花数据实时看板")
-st.caption(f"数据接口：`{API_URL}` | 缓存：5分钟 | 全屏水印：“{watermark_text}”")
+# 隐藏了数据接口显示
+st.caption(f"缓存：5分钟 | 全屏水印：“{watermark_text}”")
 
-col1, col2, col3 = st.columns([1, 4, 1])
-with col1:
-    if st.button("🔄 手动刷新数据", use_container_width=True):
-        st.cache_data.clear()
-        st.rerun()
+# 手动刷新按钮（已注释，若需要可取消注释）
+# col1, col2, col3 = st.columns([1, 4, 1])
+# with col1:
+#     if st.button("🔄 手动刷新数据", use_container_width=True):
+#         st.cache_data.clear()
+#         st.rerun()
 
 with st.spinner("加载中..."):
-    df = load_data()
+    df, data_time = load_data()
 
 if df.empty:
     st.stop()
 
-st.info(f"📅 数据时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+# 显示数据时间（数据实际获取的时间，与缓存一致）
+if data_time:
+    st.info(f"📅 数据时间：{data_time.strftime('%Y-%m-%d %H:%M:%S')}")
+else:
+    st.info("数据时间无法获取")
 
-# ==================== 排名表格（排名从1开始） ====================
+# ==================== 排名表格（隐藏行索引列） ====================
 st.subheader("🏆 送花排行榜（按今日送花降序）")
 df_display = df.copy()
-df_display.insert(0, "排名", range(1, len(df_display) + 1))   # 排名从1开始，不是0
+df_display.insert(0, "排名", range(1, len(df_display) + 1))
 display_cols = ["排名", "姓名", "今日送花"]
 if "历史总数" in df_display.columns:
     display_cols.append("历史总数")
@@ -162,7 +176,8 @@ if "今日人数" in df_display.columns:
 if "增量送花" in df_display.columns:
     display_cols.append("增量送花")
 
-st.dataframe(df_display[display_cols], use_container_width=True, height=400)
+# 关键：index=False 去掉左侧默认的0,1,2...列
+st.dataframe(df_display[display_cols], use_container_width=True, height=400, index=False)
 
 # ==================== 折线图 ====================
 st.subheader("📈 近7日送花趋势（所有明星）")
@@ -176,15 +191,15 @@ if trend_col:
         trend_list = row.get(trend_col)
         if not trend_list or not isinstance(trend_list, list):
             continue
-        gifts = {}
+        gifts_by_date = {}
         for item in trend_list:
             date = item.get("date")
             gift = item.get("giftNum") or item.get("gift_num")
             if date and gift is not None:
-                gifts[date] = gift
+                gifts_by_date[date] = gift
                 all_dates.add(date)
-        if gifts:
-            star_trends[name] = gifts
+        if gifts_by_date:
+            star_trends[name] = gifts_by_date
 
     if star_trends and all_dates:
         sorted_dates = sorted(all_dates, key=lambda x: (int(x.split(".")[0]), int(x.split(".")[1])))
@@ -202,7 +217,7 @@ if trend_col:
         plt.tight_layout()
         st.pyplot(fig)
     else:
-        st.info("暂无有效趋势数据")
+        st.info("暂无有效的趋势数据")
 else:
     st.info("当前数据不含趋势字段")
 
@@ -223,4 +238,4 @@ plt.tight_layout()
 st.pyplot(fig)
 
 st.markdown("---")
-st.caption("💡 手动刷新按钮可立即获取最新数据。水印文字：“陈浚铭四代第一门面”")
+st.caption("💡 页面每5分钟自动刷新，数据同步更新。")
