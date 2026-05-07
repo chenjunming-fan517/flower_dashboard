@@ -6,11 +6,15 @@ from datetime import datetime
 import plotly.graph_objects as go
 
 # ==================== 配置区域 ====================
+# 页面自动刷新间隔（秒）: 建议 ≤ 30，数据源每5分钟更新一次，30秒刷新对服务器压力很小
 AUTO_REFRESH_SECONDS = 30
+# 数据缓存时间（秒）: 建议比页面刷新间隔略小，确保每次刷新时缓存过期，从而获取最新数据
 CACHE_TTL_SECONDS = 25
 # ================================================
 
 st.set_page_config(page_title="送花数据分析看板", page_icon="🌸", layout="wide")
+
+# 自动刷新页面（使用配置的秒数）
 st.markdown(f'<meta http-equiv="refresh" content="{AUTO_REFRESH_SECONDS}">', unsafe_allow_html=True)
 
 # ==================== 水印 ====================
@@ -64,7 +68,7 @@ watermark_css = f"""
 """
 st.markdown(watermark_css, unsafe_allow_html=True)
 
-# 颜色映射（折线图、柱状图使用）
+# 颜色映射
 COLOR_MAP = {
     "王橹杰": "#06B6D4",
     "张函瑞": "#10B981",
@@ -77,7 +81,6 @@ COLOR_MAP = {
 DEFAULT_COLOR = "#888888"
 API_URL = "http://47.109.181.0/api/data"
 
-# ---------- 数据解析函数（保持不变） ----------
 def smart_find_list(obj):
     if isinstance(obj, list):
         return obj
@@ -192,85 +195,91 @@ if data_time:
     else:
         st.info(f"📅 数据获取时间（本地）：{data_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
-# ==================== 表格（两行结构，简单可靠） ====================
+# ==================== 卡片式排行榜 ====================
 st.subheader("🏆 送花排行榜")
-
-def fmt_num(n):
-    return f"{int(n):,}"
-
-table_html = """
+st.markdown("""
 <style>
-.rank-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-family: 'Segoe UI', Roboto, sans-serif;
-    font-size: 14px;
+.rank-card {
+    background: white;
+    border-radius: 12px;
+    padding: 12px 16px;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    transition: all 0.2s;
 }
-.rank-table th, .rank-table td {
-    border: 1px solid #d1d5db;
-    padding: 8px;
-    text-align: left;
-    vertical-align: top;
+.rank-card:hover {
+    background: #fafafa;
 }
-.rank-table th {
-    background-color: #f3f4f6;
-    font-weight: 600;
+.rank-main {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 8px;
 }
-.rank-table .main-row td {
-    background-color: #ffffff;
+.rank-name {
+    font-size: 1.3rem;
+    font-weight: bold;
+    color: #1e2a3a;
+    min-width: 100px;
 }
-.rank-table .sub-row td {
-    background-color: #f9fafb;
-    font-size: 12px;
-    color: #4b5563;
+.rank-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    font-size: 0.9rem;
 }
-.rank-table .delta {
-    color: #10b981;
-    font-weight: 500;
+.rank-stats span {
+    background: #f0f2f6;
+    padding: 4px 10px;
+    border-radius: 20px;
+}
+.rank-sub {
+    margin-top: 8px;
+    font-size: 0.8rem;
+    color: #5a6e85;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    border-top: 1px dashed #e2e8f0;
+    padding-top: 8px;
 }
 </style>
-<table class="rank-table">
-    <thead>
-        <tr><th>名称</th><th>今日送花</th><th>今日人数</th><th>人均</th></tr>
-    </thead>
-    <tbody>
-"""
+""", unsafe_allow_html=True)
 
-for _, row in df.iterrows():
+for idx, row in df.iterrows():
     name = row["姓名"]
-    today = fmt_num(row["今日送花"])
-    people = fmt_num(row["今日总人数"])
+    today = int(row["今日送花"])
+    people = int(row["今日总人数"])
     avg = row["人均送花"]
-    total_history = fmt_num(row["历史总数"]) if "历史总数" in row else "0"
+    total_history = int(row["历史总数"]) if "历史总数" in row else 0
     delta_gift = int(row["今日增量送花"]) if "今日增量送花" in row else 0
     delta_people = int(row["今日增量人数"]) if "今日增量人数" in row else 0
 
-    # 主行
-    table_html += f"""
-        <tr class="main-row">
-            <td>{name}</td>
-            <td>{today}</td>
-            <td>{people}</td>
-            <td>{avg}</td>
-        </tr>
-    """
-    # 副行
-    gift_delta_html = f'<span class="delta">↑ {fmt_num(delta_gift)}</span>' if delta_gift > 0 else ''
-    people_delta_html = f'<span class="delta">↑ {fmt_num(delta_people)}</span>' if delta_people > 0 else ''
-    table_html += f"""
-        <tr class="sub-row">
-            <td>📜 历史总数 {total_history}</td>
-            <td>{gift_delta_html}</td>
-            <td>{people_delta_html}</td>
-            <td><br/></td>
-        </tr>
-    """
+    today_fmt = f"{today:,}"
+    people_fmt = f"{people:,}"
+    total_fmt = f"{total_history:,}"
+    delta_gift_fmt = f"{delta_gift:,}"
+    delta_people_fmt = f"{delta_people:,}"
 
-table_html += """
-    </tbody>
-</table>
-"""
-st.markdown(table_html, unsafe_allow_html=True)
+    card_html = f"""
+    <div class="rank-card">
+        <div class="rank-main">
+            <div class="rank-name">{name}</div>
+            <div class="rank-stats">
+                <span>🌸 {today_fmt}</span>
+                <span>👥 {people_fmt}</span>
+                <span>📊 人均 {avg}</span>
+            </div>
+        </div>
+        <div class="rank-sub">
+            <span>📜 历史总数 {total_fmt}</span>
+            <span>📈 增量送花 {delta_gift_fmt}</span>
+            <span>👤 增量人数 {delta_people_fmt}</span>
+        </div>
+    </div>
+    """
+    st.markdown(card_html, unsafe_allow_html=True)
 
 # ==================== 折线图 ====================
 st.subheader("📈 近7日送花趋势对比")
@@ -308,13 +317,33 @@ if trend_col:
                 line=dict(color=color, width=2),
                 marker=dict(size=4)
             ))
-        fig.update_xaxes(tickvals=all_dates, ticktext=all_dates, tickangle=0, fixedrange=True, showgrid=True, gridcolor='lightgray')
+        fig.update_xaxes(
+            tickvals=all_dates,
+            ticktext=all_dates,
+            tickangle=0,
+            fixedrange=True,
+            showgrid=True,
+            gridcolor='lightgray'
+        )
         fig.update_yaxes(fixedrange=True, showgrid=True, gridcolor='lightgray')
         fig.update_layout(
-            autosize=True, margin=dict(l=20, r=20, t=40, b=40),
-            legend=dict(bgcolor='rgba(0,0,0,0)', bordercolor='rgba(0,0,0,0)', title=None, font=dict(color='black', size=10), orientation='h', yanchor='bottom', y=1.02, xanchor='center', x=0.5),
-            xaxis_title="日期", yaxis_title="送花数量",
-            plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)'
+            autosize=True,
+            margin=dict(l=20, r=20, t=40, b=40),
+            legend=dict(
+                bgcolor='rgba(0,0,0,0)',
+                bordercolor='rgba(0,0,0,0)',
+                title=None,
+                font=dict(color='black', size=10),
+                orientation='h',
+                yanchor='bottom',
+                y=1.02,
+                xanchor='center',
+                x=0.5
+            ),
+            xaxis_title="日期",
+            yaxis_title="送花数量",
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)'
         )
         config = {'displayModeBar': False, 'scrollZoom': False}
         st.plotly_chart(fig, use_container_width=True, config=config)
@@ -340,4 +369,4 @@ plt.tight_layout()
 st.pyplot(fig)
 
 st.markdown("---")
-st.caption(f"💡 页面每 {AUTO_REFRESH_SECONDS} 秒自动刷新，数据缓存 {CACHE_TTL_SECONDS} 秒。")
+st.caption(f"💡 页面每 {AUTO_REFRESH_SECONDS} 秒自动刷新，数据缓存 {CACHE_TTL_SECONDS} 秒。数据源更新后最晚 {AUTO_REFRESH_SECONDS} 秒内同步显示。")
