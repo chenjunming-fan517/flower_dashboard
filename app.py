@@ -207,7 +207,7 @@ html_table = df_display[display_cols].to_html(index=False)
 st.markdown(html_table, unsafe_allow_html=True)
 
 # 折线图（强制显示所有日期）
-st.subheader("📈 近7日送花趋势（所有明星）")
+st.subheader("📈 近7日送花趋势对比")
 trend_col = "趋势" if "趋势" in df.columns else ("trend" if "trend" in df.columns else None)
 
 if trend_col:
@@ -257,7 +257,7 @@ if trend_col:
             legend=dict(
                 bgcolor='rgba(0,0,0,0)',
                 bordercolor='rgba(0,0,0,0)',
-                title=None,
+                title=None,# ← 删除折线图自带的标题
                 font=dict(color='black', size=10),
                 orientation='h',
                 yanchor='bottom',
@@ -265,7 +265,7 @@ if trend_col:
                 xanchor='center',
                 x=0.5
             ),
-            title="近7日送花趋势对比",
+        
             xaxis_title="日期",
             yaxis_title="送花数量",
             plot_bgcolor='rgba(0,0,0,0)',
