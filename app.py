@@ -4,7 +4,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import datetime
 import plotly.graph_objects as go
-import matplotlib.patches as mpatches
 
 # ==================== 配置区域 ====================
 AUTO_REFRESH_SECONDS = 30
@@ -65,7 +64,7 @@ watermark_css = f"""
 """
 st.markdown(watermark_css, unsafe_allow_html=True)
 
-# 颜色映射
+# 颜色映射（用于折线图）
 COLOR_MAP = {
     "王橹杰": "#06B6D4",
     "张函瑞": "#10B981",
@@ -192,7 +191,7 @@ if data_time:
     else:
         st.info(f"📅 数据获取时间（本地）：{data_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
-# ==================== 卡片式排行榜（对齐版本，带表头） ====================
+# ==================== 卡片式排行榜（对齐，带表头，间距调小） ====================
 st.subheader("🏆 送花排行榜")
 
 st.markdown("""
@@ -201,7 +200,7 @@ st.markdown("""
     background: white;
     border-radius: 12px;
     padding: 12px 16px;
-    margin-bottom: 8px;   /* 调整卡片间距，原为12px，现改为8px缩小间隙 */
+    margin-bottom: 5px;   /* 卡片间距缩小为5px */
     box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     transition: all 0.2s;
 }
@@ -361,3 +360,5 @@ if trend_col:
 else:
     st.info("当前数据不含趋势字段")
 
+st.markdown("---")
+st.caption(f"💡 页面每 {AUTO_REFRESH_SECONDS} 秒自动刷新，数据缓存 {CACHE_TTL_SECONDS} 秒。")
