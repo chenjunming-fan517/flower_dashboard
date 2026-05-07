@@ -5,13 +5,12 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 import plotly.graph_objects as go
 
-# ==================== 页面配置 ====================
 st.set_page_config(page_title="送花数据分析看板", page_icon="🌸", layout="wide")
 
-# ==================== 自动刷新 ====================
-st.markdown('<meta http-equiv="refresh" content="300">', unsafe_allow_html=True)
+# 自动刷新页面（每60秒）
+st.markdown('<meta http-equiv="refresh" content="60">', unsafe_allow_html=True)
 
-# ==================== 全屏水印 ====================
+# ==================== 水印 ====================
 watermark_text = "陈浚铭四代第一门面"
 watermark_css = f"""
 <style>
@@ -62,7 +61,7 @@ watermark_css = f"""
 """
 st.markdown(watermark_css, unsafe_allow_html=True)
 
-# ==================== 颜色映射 ====================
+# 颜色映射
 COLOR_MAP = {
     "王橹杰": "#06B6D4",
     "张函瑞": "#10B981",
@@ -73,10 +72,9 @@ COLOR_MAP = {
     "陈浚铭": "#EF4444",
 }
 DEFAULT_COLOR = "#888888"
-
 API_URL = "http://47.109.181.0/api/data"
 
-# ==================== 解析函数 ====================
+# 解析函数
 def smart_find_list(obj):
     if isinstance(obj, list):
         return obj
@@ -131,7 +129,7 @@ def auto_map_columns(df):
                 df_renamed = df_renamed[keep_cols]
     return df_renamed
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=60)   # 数据缓存60秒
 def load_data():
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
@@ -173,7 +171,7 @@ def load_data():
 
 # ==================== 界面 ====================
 st.title("🌸 百度送花数据实时看板")
-st.caption(f"缓存：5分钟 | 全屏水印：“{watermark_text}”")
+st.caption(f"缓存：60秒 | 自动刷新：60秒 | 全屏水印：“{watermark_text}”")
 
 with st.spinner("加载中..."):
     df, data_time, time_source, error = load_data()
@@ -191,7 +189,7 @@ if data_time:
     else:
         st.info(f"📅 数据获取时间（本地）：{data_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
-# ----- 表格 -----
+# 表格
 st.subheader("🏆 送花排行榜（按今日送花降序）")
 df_display = df.copy()
 df_display.insert(0, "排名", range(1, len(df_display) + 1))
@@ -208,7 +206,7 @@ display_cols = base_cols + extra_cols
 html_table = df_display[display_cols].to_html(index=False)
 st.markdown(html_table, unsafe_allow_html=True)
 
-# ----- 折线图（移动端适配，禁止缩放/滑动，隐藏工具栏）-----
+# 折线图（强制显示所有日期）
 st.subheader("📈 近7日送花趋势（所有明星）")
 trend_col = "趋势" if "趋势" in df.columns else ("trend" if "trend" in df.columns else None)
 
@@ -226,13 +224,12 @@ if trend_col:
                 trend_data.append({"明星": name, "日期": date, "送花数量": gift})
     if trend_data:
         trend_df = pd.DataFrame(trend_data)
-        # 排序日期
         try:
             trend_df["日期序"] = trend_df["日期"].apply(lambda x: (int(x.split(".")[0]), int(x.split(".")[1])))
             trend_df = trend_df.sort_values("日期序").drop("日期序", axis=1)
         except:
             trend_df = trend_df.sort_values("日期")
-        
+        all_dates = sorted(trend_df["日期"].unique())
         fig = go.Figure()
         for name in trend_df["明星"].unique():
             subset = trend_df[trend_df["明星"] == name].sort_values("日期")
@@ -245,24 +242,17 @@ if trend_col:
                 line=dict(color=color, width=2),
                 marker=dict(size=4)
             ))
-        
-        # 在每条线末端添加名字标签（可选）
-        for trace in fig.data:
-            if len(trace.x) > 0:
-                fig.add_annotation(
-                    x=trace.x[-1],
-                    y=trace.y[-1],
-                    text=trace.name,
-                    showarrow=False,
-                    font=dict(size=9, color=trace.line.color),
-                    xanchor="left",
-                    xshift=3
-                )
-        
-        # 布局：移动端自适应，固定坐标范围，禁止缩放/平移
+        fig.update_xaxes(
+            tickvals=all_dates,
+            ticktext=all_dates,
+            tickangle=0,
+            fixedrange=True,
+            showgrid=True,
+            gridcolor='lightgray'
+        )
+        fig.update_yaxes(fixedrange=True, showgrid=True, gridcolor='lightgray')
         fig.update_layout(
             autosize=True,
-            width=None,
             margin=dict(l=20, r=20, t=40, b=40),
             legend=dict(
                 bgcolor='rgba(0,0,0,0)',
@@ -276,37 +266,19 @@ if trend_col:
                 x=0.5
             ),
             title="近7日送花趋势对比",
-            xaxis=dict(
-                title="日期",
-                fixedrange=True,      # 禁止水平拖动/缩放
-                showgrid=True,
-                gridcolor='lightgray'
-            ),
-            yaxis=dict(
-                title="送花数量",
-                fixedrange=True,      # 禁止垂直拖动/缩放
-                showgrid=True,
-                gridcolor='lightgray'
-            ),
+            xaxis_title="日期",
+            yaxis_title="送花数量",
             plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            font=dict(color='black', size=11)
+            paper_bgcolor='rgba(0,0,0,0)'
         )
-        
-        # 禁用缩放和工具栏
-        config = {
-            'displayModeBar': False,
-            'scrollZoom': False,
-            'staticPlot': False,
-            'editable': False
-        }
+        config = {'displayModeBar': False, 'scrollZoom': False}
         st.plotly_chart(fig, use_container_width=True, config=config)
     else:
         st.info("暂无有效的趋势数据")
 else:
     st.info("当前数据不含趋势字段")
 
-# ----- 柱状图 -----
+# 柱状图
 st.subheader("📊 今日送花排行柱状图（按送花数量排序）")
 df_chart = df.sort_values("今日送花", ascending=False).reset_index(drop=True)
 bar_colors = [COLOR_MAP.get(name, DEFAULT_COLOR) for name in df_chart["姓名"]]
@@ -323,4 +295,4 @@ plt.tight_layout()
 st.pyplot(fig)
 
 st.markdown("---")
-st.caption("💡 页面每5分钟自动刷新。折线图已锁定范围，不可滑动/缩放。")
+st.caption("💡 页面每60秒自动刷新，数据缓存60秒。数据源更新后，网页最晚60秒内自动显示最新数据。")
