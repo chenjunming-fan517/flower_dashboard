@@ -5,10 +5,17 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 import plotly.graph_objects as go
 
+# ==================== 配置区域 ====================
+# 页面自动刷新间隔（秒）: 建议 ≤ 30，数据源每5分钟更新一次，30秒刷新对服务器压力很小
+AUTO_REFRESH_SECONDS = 30
+# 数据缓存时间（秒）: 建议比页面刷新间隔略小，确保每次刷新时缓存过期，从而获取最新数据
+CACHE_TTL_SECONDS = 25
+# ================================================
+
 st.set_page_config(page_title="送花数据分析看板", page_icon="🌸", layout="wide")
 
-# 自动刷新页面（每10秒）
-st.markdown('<meta http-equiv="refresh" content="10">', unsafe_allow_html=True)
+# 自动刷新页面（使用配置的秒数）
+st.markdown(f'<meta http-equiv="refresh" content="{AUTO_REFRESH_SECONDS}">', unsafe_allow_html=True)
 
 # ==================== 水印 ====================
 watermark_text = "陈浚铭四代第一门面"
@@ -128,7 +135,7 @@ def auto_map_columns(df):
                 df_renamed = df_renamed[keep_cols]
     return df_renamed
 
-@st.cache_data(ttl=10)   # 数据缓存10秒
+@st.cache_data(ttl=CACHE_TTL_SECONDS)
 def load_data():
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
@@ -170,7 +177,7 @@ def load_data():
 
 # ==================== 界面 ====================
 st.title("🌸 百度送花数据实时看板")
-st.caption(f"缓存：10秒 | 自动刷新：10秒 | 全屏水印：“{watermark_text}”")
+st.caption(f"缓存：{CACHE_TTL_SECONDS}秒 | 自动刷新：{AUTO_REFRESH_SECONDS}秒 | 全屏水印：“{watermark_text}”")
 
 with st.spinner("加载中..."):
     df, data_time, time_source, error = load_data()
@@ -362,4 +369,4 @@ plt.tight_layout()
 st.pyplot(fig)
 
 st.markdown("---")
-st.caption("💡 页面每10秒自动刷新，数据缓存10秒。数据源更新后，最晚10秒内自动显示最新数据。")
+st.caption(f"💡 页面每 {AUTO_REFRESH_SECONDS} 秒自动刷新，数据缓存 {CACHE_TTL_SECONDS} 秒。数据源更新后最晚 {AUTO_REFRESH_SECONDS} 秒内同步显示。")
