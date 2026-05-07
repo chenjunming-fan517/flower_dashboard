@@ -83,11 +83,9 @@ def smart_find_list(obj):
     if isinstance(obj, list):
         return obj
     if isinstance(obj, dict):
-        # 常见字段名
         for key in ["data_list", "data", "list", "result", "records", "items", "rows"]:
             if key in obj and isinstance(obj[key], list):
                 return obj[key]
-        # 遍历所有值，找第一个列表
         for v in obj.values():
             if isinstance(v, list):
                 return v
@@ -96,83 +94,98 @@ def smart_find_list(obj):
 def smart_extract_time(obj):
     """尝试从接口返回中提取更新时间"""
     if isinstance(obj, dict):
-        # 常见时间字段
         for key in ["update_time", "last_update", "data_time", "timestamp", "time"]:
             if key in obj:
                 val = obj[key]
                 if isinstance(val, str):
                     try:
-                        # 尝试解析常见格式
                         return datetime.strptime(val, "%Y-%m-%d %H:%M:%S")
                     except:
-                        try:
-                            return datetime.strptime(val, "%Y-%m-%d %H:%M:%S")
-                        except:
-                            pass
+                        pass
     return None
 
 def auto_map_columns(df):
-    """自动映射列名到标准名称"""
+    """
+    智能映射列名，避免重复。
+    将可能是姓名、今日送花等含义的列重命名为标准名称。
+    每个标准名称只映射一次，且保留原始列中第一个匹配的。
+    """
+    # 标准列名 -> 可能的原始列名关键词列表（小写）
+    mapping_rules = {
+        "姓名": ["name", "姓名", "star_name"],
+        "今日送花": ["today_gift", "today", "今日送花", "gift_today", "flower_today"],
+        "历史总数": ["total_gift", "total", "历史总数", "total_flowers"],
+        "今日人数": ["today_users", "users", "今日人数", "people"],
+        "增量送花": ["delta_gift", "delta", "增量送花"],
+        "趋势": ["trend", "趋势"]
+    }
+    
     rename_dict = {}
-    for col in df.columns:
-        col_lower = col.lower()
-        if "name" in col_lower or "姓名" in col:
-            rename_dict[col] = "姓名"
-        elif "today_gift" in col_lower or "today" in col_lower or "今日送花" in col:
-            rename_dict[col] = "今日送花"
-        elif "total_gift" in col_lower or "total" in col_lower or "历史总数" in col:
-            rename_dict[col] = "历史总数"
-        elif "today_users" in col_lower or "users" in col_lower or "今日人数" in col:
-            rename_dict[col] = "今日人数"
-        elif "delta_gift" in col_lower or "delta" in col_lower or "增量送花" in col:
-            rename_dict[col] = "增量送花"
-        elif "trend" in col_lower:
-            rename_dict[col] = "趋势"
-    return df.rename(columns=rename_dict)
+    used_original_cols = set()
+    for std_name, keywords in mapping_rules.items():
+        for col in df.columns:
+            if col in used_original_cols:
+                continue
+            col_lower = col.lower()
+            # 检查当前列名是否匹配任一关键词
+            if any(keyword in col_lower for keyword in keywords):
+                rename_dict[col] = std_name
+                used_original_cols.add(col)
+                break
+    # 执行重命名
+    df_renamed = df.rename(columns=rename_dict)
+    
+    # 确保每个标准列只存在一列（如果因为重名而产生多个，保留第一个）
+    for std_name in mapping_rules.keys():
+        if std_name in df_renamed.columns:
+            # 找到所有名为 std_name 的列（可能多个，因为原列已经叫这个名字，又重命名了一个）
+            matching_cols = [col for col in df_renamed.columns if col == std_name]
+            if len(matching_cols) > 1:
+                # 保留第一个，删除后面的
+                cols_to_keep = [matching_cols[0]] + [col for col in df_renamed.columns if col not in matching_cols[1:]]
+                df_renamed = df_renamed[cols_to_keep]
+    return df_renamed
 
-# ==================== 数据加载函数（带缓存） ====================
+# ==================== 数据加载函数 ====================
 @st.cache_data(ttl=300)
 def load_data():
-    """
-    返回 (df, data_time, error_msg)
-    """
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
         resp = requests.get(API_URL, timeout=10, headers=headers)
         resp.raise_for_status()
         raw = resp.json()
 
-        # 提取更新时间
+        # 提取更新时间（如果有）
         data_time = smart_extract_time(raw)
+        time_source = "api" if data_time else "local"
         if data_time is None:
-            # 如果没有更新时间，则使用本地获取时间，并标记为本地时间
             data_time = datetime.now()
-            time_source = "local"
-        else:
-            time_source = "api"
 
         # 提取列表数据
         data_list = smart_find_list(raw)
         if not data_list:
-            raise ValueError("无法从返回数据中提取列表")
+            raise ValueError("未找到列表数据")
 
         df = pd.DataFrame(data_list)
         if df.empty:
-            raise ValueError("提取的列表为空")
+            raise ValueError("列表为空")
 
         # 自动映射列名
         df = auto_map_columns(df)
 
-        # 确保必要列存在
+        # 检查必要列是否存在
         if "姓名" not in df.columns:
             df["姓名"] = [f"明星{i}" for i in range(len(df))]
         if "今日送花" not in df.columns:
-            # 尝试将第一个数字列设为今日送花
+            # 尝试将第一个数字列作为今日送花
             num_cols = df.select_dtypes(include=['number']).columns
             if len(num_cols) > 0:
                 df["今日送花"] = df[num_cols[0]]
             else:
                 df["今日送花"] = 0
+
+        # 确保今日送花为数值类型
+        df["今日送花"] = pd.to_numeric(df["今日送花"], errors='coerce').fillna(0)
 
         # 按今日送花降序排序
         df = df.sort_values("今日送花", ascending=False).reset_index(drop=True)
@@ -185,11 +198,6 @@ def load_data():
 # ==================== UI 布局 ====================
 st.title("🌸 百度送花数据实时看板")
 st.caption(f"缓存：5分钟 | 全屏水印：“{watermark_text}”")
-
-# 手动刷新按钮（可选，保留但注释，如需启用可取消注释）
-# if st.button("🔄 手动刷新数据"):
-#     st.cache_data.clear()
-#     st.rerun()
 
 with st.spinner("加载中..."):
     df, data_time, time_source, error = load_data()
@@ -207,11 +215,11 @@ if data_time:
     if time_source == "api":
         st.info(f"📅 数据最后更新时间（接口提供）：{data_time.strftime('%Y-%m-%d %H:%M:%S')}")
     else:
-        st.info(f"📅 数据获取时间（本地，接口无时间字段）：{data_time.strftime('%Y-%m-%d %H:%M:%S')}")
+        st.info(f"📅 数据获取时间（本地）：{data_time.strftime('%Y-%m-%d %H:%M:%S')}")
 else:
     st.info("数据时间未知")
 
-# ==================== 1. 排名表格（使用 HTML 表格，无索引列） ====================
+# ==================== 1. 排名表格（HTML表格，无索引列） ====================
 st.subheader("🏆 送花排行榜（按今日送花降序）")
 df_display = df.copy()
 df_display.insert(0, "排名", range(1, len(df_display) + 1))
@@ -224,11 +232,10 @@ if "今日人数" in df_display.columns:
 if "增量送花" in df_display.columns:
     display_cols.append("增量送花")
 
-# 使用 HTML 表格，兼容所有 Streamlit 版本，且不显示行索引
 html_table = df_display[display_cols].to_html(index=False)
 st.markdown(html_table, unsafe_allow_html=True)
 
-# ==================== 2. 折线图（趋势） ====================
+# ==================== 2. 折线图 ====================
 st.subheader("📈 近7日送花趋势（所有明星）")
 trend_col = None
 if "趋势" in df.columns:
@@ -255,11 +262,10 @@ if trend_col:
             star_trends[name] = gifts_by_date
 
     if star_trends and all_dates:
-        # 日期排序（格式 MM.DD）
         try:
             sorted_dates = sorted(all_dates, key=lambda x: (int(x.split(".")[0]), int(x.split(".")[1])))
         except:
-            sorted_dates = sorted(all_dates)  # fallback
+            sorted_dates = sorted(all_dates)
         fig, ax = plt.subplots(figsize=(12, 6))
         for name, gifts in star_trends.items():
             color = COLOR_MAP.get(name, DEFAULT_COLOR)
