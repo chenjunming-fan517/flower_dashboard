@@ -6,11 +6,15 @@ from datetime import datetime
 import plotly.graph_objects as go
 
 # ==================== 配置区域 ====================
-AUTO_REFRESH_SECONDS = 30   # 页面自动刷新间隔（秒）
-CACHE_TTL_SECONDS = 25      # 数据缓存时间（秒）
+# 页面自动刷新间隔（秒）: 建议 ≤ 30，数据源每5分钟更新一次，30秒刷新对服务器压力很小
+AUTO_REFRESH_SECONDS = 30
+# 数据缓存时间（秒）: 建议比页面刷新间隔略小，确保每次刷新时缓存过期，从而获取最新数据
+CACHE_TTL_SECONDS = 25
 # ================================================
 
 st.set_page_config(page_title="送花数据分析看板", page_icon="🌸", layout="wide")
+
+# 自动刷新页面（使用配置的秒数）
 st.markdown(f'<meta http-equiv="refresh" content="{AUTO_REFRESH_SECONDS}">', unsafe_allow_html=True)
 
 # ==================== 水印 ====================
@@ -64,9 +68,15 @@ watermark_css = f"""
 """
 st.markdown(watermark_css, unsafe_allow_html=True)
 
+# 颜色映射
 COLOR_MAP = {
-    "王橹杰": "#06B6D4", "张函瑞": "#10B981", "张桂源": "#F59E0B",
-    "杨博文": "#EC4899", "左奇函": "#3B82F6", "陈奕恒": "#8B5CF6", "陈浚铭": "#EF4444"
+    "王橹杰": "#06B6D4",
+    "张函瑞": "#10B981",
+    "张桂源": "#F59E0B",
+    "杨博文": "#EC4899",
+    "左奇函": "#3B82F6",
+    "陈奕恒": "#8B5CF6",
+    "陈浚铭": "#EF4444",
 }
 DEFAULT_COLOR = "#888888"
 API_URL = "http://47.109.181.0/api/data"
@@ -147,7 +157,10 @@ def load_data():
             df["姓名"] = [f"明星{i}" for i in range(len(df))]
         if "今日送花" not in df.columns:
             num_cols = df.select_dtypes(include=['number']).columns
-            df["今日送花"] = df[num_cols[0]] if len(num_cols) > 0 else 0
+            if len(num_cols) > 0:
+                df["今日送花"] = df[num_cols[0]]
+            else:
+                df["今日送花"] = 0
         if "今日总人数" not in df.columns:
             df["今日总人数"] = 0
         df["今日送花"] = pd.to_numeric(df["今日送花"], errors='coerce').fillna(0)
@@ -182,66 +195,59 @@ if data_time:
     else:
         st.info(f"📅 数据获取时间（本地）：{data_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
-# ==================== 排行榜（表格样式，完全复刻第一张照片） ====================
+# ==================== 卡片式排行榜 ====================
 st.subheader("🏆 送花排行榜")
-
-# 自定义表格样式，保证手机横向滚动
-table_html = """
+st.markdown("""
 <style>
-.rank-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-family: 'Segoe UI', Roboto, sans-serif;
+.rank-card {
+    background: white;
+    border-radius: 12px;
+    padding: 12px 16px;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    transition: all 0.2s;
 }
-.rank-table th, .rank-table td {
-    border-bottom: 1px solid #e2e8f0;
-    padding: 12px 8px;
-    text-align: left;
-    vertical-align: top;
+.rank-card:hover {
+    background: #fafafa;
 }
-.rank-table th {
-    background-color: #f8fafc;
-    font-weight: 600;
-    color: #1e293b;
+.rank-main {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 8px;
 }
-.rank-table td:first-child {
+.rank-name {
+    font-size: 1.3rem;
     font-weight: bold;
-    background-color: #ffffff;
+    color: #1e2a3a;
+    min-width: 100px;
 }
-.sub-row {
-    font-size: 0.75rem;
-    color: #475569;
-    border-top: none;
-    padding-top: 0;
-    padding-bottom: 12px;
+.rank-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    font-size: 0.9rem;
 }
-.sub-row span {
-    margin-right: 16px;
-    white-space: nowrap;
+.rank-stats span {
+    background: #f0f2f6;
+    padding: 4px 10px;
+    border-radius: 20px;
 }
-.main-row td {
-    border-bottom: none;
-    padding-bottom: 4px;
-}
-@media (max-width: 640px) {
-    .rank-table th, .rank-table td {
-        padding: 8px 4px;
-        font-size: 0.85rem;
-    }
-    .sub-row span {
-        font-size: 0.7rem;
-        margin-right: 8px;
-    }
+.rank-sub {
+    margin-top: 8px;
+    font-size: 0.8rem;
+    color: #5a6e85;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    border-top: 1px dashed #e2e8f0;
+    padding-top: 8px;
 }
 </style>
-<table class="rank-table">
-    <thead>
-        <tr><th>名称</th><th>今日送花</th><th>今日人数</th><th>人均</th></tr>
-    </thead>
-    <tbody>
-"""
+""", unsafe_allow_html=True)
 
-for _, row in df.iterrows():
+for idx, row in df.iterrows():
     name = row["姓名"]
     today = int(row["今日送花"])
     people = int(row["今日总人数"])
@@ -256,27 +262,24 @@ for _, row in df.iterrows():
     delta_gift_fmt = f"{delta_gift:,}"
     delta_people_fmt = f"{delta_people:,}"
 
-    table_html += f"""
-        <tr class="main-row">
-            <td style="font-weight:bold;">{name}</td>
-            <td>{today_fmt}</td>
-            <td>{people_fmt}</td>
-            <td>{avg}</td>
-        </tr>
-        <tr class="sub-row">
-            <td colspan="4">
-                <span>📜 历史总数 {total_fmt}</span>
-                <span>📈 增量送花 {delta_gift_fmt}</span>
-                <span>👤 增量人数 {delta_people_fmt}</span>
-            </td>
-        </tr>
+    card_html = f"""
+    <div class="rank-card">
+        <div class="rank-main">
+            <div class="rank-name">{name}</div>
+            <div class="rank-stats">
+                <span>🌸 {today_fmt}</span>
+                <span>👥 {people_fmt}</span>
+                <span>📊 人均 {avg}</span>
+            </div>
+        </div>
+        <div class="rank-sub">
+            <span>📜 历史总数 {total_fmt}</span>
+            <span>📈 增量送花 {delta_gift_fmt}</span>
+            <span>👤 增量人数 {delta_people_fmt}</span>
+        </div>
+    </div>
     """
-
-table_html += """
-    </tbody>
-</table>
-"""
-st.markdown(table_html, unsafe_allow_html=True)
+    st.markdown(card_html, unsafe_allow_html=True)
 
 # ==================== 折线图 ====================
 st.subheader("📈 近7日送花趋势对比")
@@ -314,13 +317,33 @@ if trend_col:
                 line=dict(color=color, width=2),
                 marker=dict(size=4)
             ))
-        fig.update_xaxes(tickvals=all_dates, ticktext=all_dates, tickangle=0, fixedrange=True, showgrid=True, gridcolor='lightgray')
+        fig.update_xaxes(
+            tickvals=all_dates,
+            ticktext=all_dates,
+            tickangle=0,
+            fixedrange=True,
+            showgrid=True,
+            gridcolor='lightgray'
+        )
         fig.update_yaxes(fixedrange=True, showgrid=True, gridcolor='lightgray')
         fig.update_layout(
-            autosize=True, margin=dict(l=20, r=20, t=40, b=40),
-            legend=dict(bgcolor='rgba(0,0,0,0)', bordercolor='rgba(0,0,0,0)', title=None, font=dict(color='black', size=10), orientation='h', yanchor='bottom', y=1.02, xanchor='center', x=0.5),
-            xaxis_title="日期", yaxis_title="送花数量",
-            plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)'
+            autosize=True,
+            margin=dict(l=20, r=20, t=40, b=40),
+            legend=dict(
+                bgcolor='rgba(0,0,0,0)',
+                bordercolor='rgba(0,0,0,0)',
+                title=None,
+                font=dict(color='black', size=10),
+                orientation='h',
+                yanchor='bottom',
+                y=1.02,
+                xanchor='center',
+                x=0.5
+            ),
+            xaxis_title="日期",
+            yaxis_title="送花数量",
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)'
         )
         config = {'displayModeBar': False, 'scrollZoom': False}
         st.plotly_chart(fig, use_container_width=True, config=config)
