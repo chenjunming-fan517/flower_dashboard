@@ -64,7 +64,7 @@ watermark_css = f"""
 """
 st.markdown(watermark_css, unsafe_allow_html=True)
 
-# 颜色映射
+# 颜色映射（折线图、柱状图使用）
 COLOR_MAP = {
     "王橹杰": "#06B6D4",
     "张函瑞": "#10B981",
@@ -77,6 +77,7 @@ COLOR_MAP = {
 DEFAULT_COLOR = "#888888"
 API_URL = "http://47.109.181.0/api/data"
 
+# ---------- 数据解析函数（保持不变） ----------
 def smart_find_list(obj):
     if isinstance(obj, list):
         return obj
@@ -191,73 +192,41 @@ if data_time:
     else:
         st.info(f"📅 数据获取时间（本地）：{data_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
-# ==================== 表格排行榜（替换卡片式） ====================
+# ==================== 表格（两行结构，简单可靠） ====================
 st.subheader("🏆 送花排行榜")
 
 def fmt_num(n):
     return f"{int(n):,}"
 
-# 表格 HTML 样式
 table_html = """
 <style>
 .rank-table {
     width: 100%;
     border-collapse: collapse;
-    font-family: 'Inter', 'PingFang SC', system-ui, sans-serif;
+    font-family: 'Segoe UI', Roboto, sans-serif;
     font-size: 14px;
-    background: white;
-    border-radius: 16px;
-    overflow: hidden;
 }
 .rank-table th, .rank-table td {
-    padding: 12px 8px;
+    border: 1px solid #d1d5db;
+    padding: 8px;
     text-align: left;
-    border-bottom: 1px solid #e2e8f0;
+    vertical-align: top;
 }
 .rank-table th {
-    background-color: #f8fafc;
+    background-color: #f3f4f6;
     font-weight: 600;
-    color: #1e293b;
 }
-.rank-table .main-cell {
-    font-weight: 500;
+.rank-table .main-row td {
+    background-color: #ffffff;
 }
-.rank-table .sub-text {
-    font-size: 11px;
-    color: #64748b;
-    margin-top: 4px;
-    line-height: 1.4;
+.rank-table .sub-row td {
+    background-color: #f9fafb;
+    font-size: 12px;
+    color: #4b5563;
 }
 .rank-table .delta {
     color: #10b981;
-    background: #ecfdf5;
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
-    padding: 2px 6px;
-    border-radius: 12px;
-    font-size: 11px;
-    font-weight: 600;
-    margin-top: 6px;
-    border: 1px solid #a7f3d0;
-}
-.rank-table .delta svg {
-    width: 10px;
-    height: 10px;
-    stroke-width: 2.5;
-}
-@media (max-width: 640px) {
-    .rank-table th, .rank-table td {
-        padding: 8px 4px;
-        font-size: 12px;
-    }
-    .rank-table .sub-text {
-        font-size: 9px;
-    }
-    .rank-table .delta {
-        font-size: 9px;
-        padding: 1px 4px;
-    }
+    font-weight: 500;
 }
 </style>
 <table class="rank-table">
@@ -273,29 +242,27 @@ for _, row in df.iterrows():
     people = fmt_num(row["今日总人数"])
     avg = row["人均送花"]
     total_history = fmt_num(row["历史总数"]) if "历史总数" in row else "0"
-    delta_gift = row["今日增量送花"] if "今日增量送花" in row else 0
-    delta_people = row["今日增量人数"] if "今日增量人数" in row else 0
+    delta_gift = int(row["今日增量送花"]) if "今日增量送花" in row else 0
+    delta_people = int(row["今日增量人数"]) if "今日增量人数" in row else 0
 
-    # 向上箭头 SVG
-    up_arrow = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 15l7-7 7 7"/></svg>'
-    delta_gift_html = f'<div class="delta">{up_arrow} {fmt_num(delta_gift)}</div>' if delta_gift > 0 else ''
-    delta_people_html = f'<div class="delta">{up_arrow} {fmt_num(delta_people)}</div>' if delta_people > 0 else ''
-
+    # 主行
     table_html += f"""
-        <tr>
-            <td>
-                <div class="main-cell">{name}</div>
-                <div class="sub-text">📜 历史总数 {total_history}</div>
-            </td>
-            <td>
-                <div class="main-cell">{today}</div>
-                {delta_gift_html}
-            </td>
-            <td>
-                <div class="main-cell">{people}</div>
-                {delta_people_html}
-            </td>
-            <td class="main-cell">{avg}</td>
+        <tr class="main-row">
+            <td>{name}</td>
+            <td>{today}</td>
+            <td>{people}</td>
+            <td>{avg}</td>
+        </tr>
+    """
+    # 副行
+    gift_delta_html = f'<span class="delta">↑ {fmt_num(delta_gift)}</span>' if delta_gift > 0 else ''
+    people_delta_html = f'<span class="delta">↑ {fmt_num(delta_people)}</span>' if delta_people > 0 else ''
+    table_html += f"""
+        <tr class="sub-row">
+            <td>📜 历史总数 {total_history}</td>
+            <td>{gift_delta_html}</td>
+            <td>{people_delta_html}</td>
+            <td><br/></td>
         </tr>
     """
 
@@ -373,4 +340,4 @@ plt.tight_layout()
 st.pyplot(fig)
 
 st.markdown("---")
-st.caption(f"💡 页面每 {AUTO_REFRESH_SECONDS} 秒自动刷新，数据缓存 {CACHE_TTL_SECONDS} 秒。增量数据前的 ↑ 为绿色。")
+st.caption(f"💡 页面每 {AUTO_REFRESH_SECONDS} 秒自动刷新，数据缓存 {CACHE_TTL_SECONDS} 秒。")
