@@ -11,7 +11,7 @@ st.set_page_config(page_title="送花数据分析看板", page_icon="🌸", layo
 # ==================== 自动刷新 ====================
 st.markdown('<meta http-equiv="refresh" content="300">', unsafe_allow_html=True)
 
-# ==================== 水印 ====================
+# ==================== 全屏水印 ====================
 watermark_text = "陈浚铭四代第一门面"
 watermark_css = f"""
 <style>
@@ -171,7 +171,7 @@ def load_data():
     except Exception as e:
         return pd.DataFrame(), None, None, str(e)
 
-# ==================== UI ====================
+# ==================== 界面 ====================
 st.title("🌸 百度送花数据实时看板")
 st.caption(f"缓存：5分钟 | 全屏水印：“{watermark_text}”")
 
@@ -191,7 +191,7 @@ if data_time:
     else:
         st.info(f"📅 数据获取时间（本地）：{data_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
-# 表格
+# ----- 表格 -----
 st.subheader("🏆 送花排行榜（按今日送花降序）")
 df_display = df.copy()
 df_display.insert(0, "排名", range(1, len(df_display) + 1))
@@ -208,7 +208,7 @@ display_cols = base_cols + extra_cols
 html_table = df_display[display_cols].to_html(index=False)
 st.markdown(html_table, unsafe_allow_html=True)
 
-# ==================== 折线图（Plotly，交互式，图例透明无边框，末端显示名字） ====================
+# ----- 折线图（移动端适配）-----
 st.subheader("📈 近7日送花趋势（所有明星）")
 trend_col = "趋势" if "趋势" in df.columns else ("trend" if "trend" in df.columns else None)
 
@@ -245,29 +245,22 @@ if trend_col:
                 line=dict(color=color, width=2),
                 marker=dict(size=4)
             ))
-        # 在每条线末端添加名字标签
-        for trace in fig.data:
-            if len(trace.x) > 0:
-                fig.add_annotation(
-                    x=trace.x[-1],
-                    y=trace.y[-1],
-                    text=trace.name,
-                    showarrow=False,
-                    font=dict(size=10, color=trace.line.color),
-                    xanchor="left",
-                    xshift=5
-                )
-        # 配置图例：背景透明，无边框，位置可调
+        
+        # 自适应移动端布局
         fig.update_layout(
-            showlegend=True,
+            autosize=True,
+            width=None,
+            margin=dict(l=20, r=20, t=40, b=40),   # 减小左右边距，适配小屏
             legend=dict(
                 bgcolor='rgba(0,0,0,0)',
                 bordercolor='rgba(0,0,0,0)',
                 title=None,
-                font=dict(color='black', size=11),
-                itemsizing='constant',
-                orientation='v',
-                x=1.02, y=1
+                font=dict(color='black', size=10),
+                orientation='h',            # 水平图例
+                yanchor='bottom',
+                y=1.02,                     # 放在图表上方
+                xanchor='center',
+                x=0.5
             ),
             title="近7日送花趋势对比",
             xaxis_title="日期",
@@ -275,17 +268,19 @@ if trend_col:
             hovermode="closest",
             plot_bgcolor='rgba(0,0,0,0)',
             paper_bgcolor='rgba(0,0,0,0)',
-            font=dict(color='black')
+            font=dict(color='black', size=11)
         )
-        fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='lightgray')
+        # 坐标网格
+        fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='lightgray', tickangle=0)
         fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='lightgray')
-        st.plotly_chart(fig, use_container_width=True)
+        # 使用容器宽度并启用响应式
+        st.plotly_chart(fig, use_container_width=True, config={'responsive': True, 'displayModeBar': False})
     else:
         st.info("暂无有效的趋势数据")
 else:
     st.info("当前数据不含趋势字段")
 
-# ==================== 柱状图 ====================
+# ----- 柱状图（保持不变）-----
 st.subheader("📊 今日送花排行柱状图（按送花数量排序）")
 df_chart = df.sort_values("今日送花", ascending=False).reset_index(drop=True)
 bar_colors = [COLOR_MAP.get(name, DEFAULT_COLOR) for name in df_chart["姓名"]]
@@ -302,4 +297,4 @@ plt.tight_layout()
 st.pyplot(fig)
 
 st.markdown("---")
-st.caption("💡 页面每5分钟自动刷新。折线图：点击右侧图例中的名字可隐藏/显示对应线条，并且每条线末端显示名字。")
+st.caption("💡 页面每5分钟自动刷新。折线图已针对手机优化，自动缩放并显示完整图例。")
