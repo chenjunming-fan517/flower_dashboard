@@ -208,7 +208,7 @@ display_cols = base_cols + extra_cols
 html_table = df_display[display_cols].to_html(index=False)
 st.markdown(html_table, unsafe_allow_html=True)
 
-# ----- 折线图（移动端适配）-----
+# ----- 折线图（移动端适配，禁止缩放/滑动，隐藏工具栏）-----
 st.subheader("📈 近7日送花趋势（所有明星）")
 trend_col = "趋势" if "趋势" in df.columns else ("trend" if "trend" in df.columns else None)
 
@@ -246,41 +246,67 @@ if trend_col:
                 marker=dict(size=4)
             ))
         
-        # 自适应移动端布局
+        # 在每条线末端添加名字标签（可选）
+        for trace in fig.data:
+            if len(trace.x) > 0:
+                fig.add_annotation(
+                    x=trace.x[-1],
+                    y=trace.y[-1],
+                    text=trace.name,
+                    showarrow=False,
+                    font=dict(size=9, color=trace.line.color),
+                    xanchor="left",
+                    xshift=3
+                )
+        
+        # 布局：移动端自适应，固定坐标范围，禁止缩放/平移
         fig.update_layout(
             autosize=True,
             width=None,
-            margin=dict(l=20, r=20, t=40, b=40),   # 减小左右边距，适配小屏
+            margin=dict(l=20, r=20, t=40, b=40),
             legend=dict(
                 bgcolor='rgba(0,0,0,0)',
                 bordercolor='rgba(0,0,0,0)',
                 title=None,
                 font=dict(color='black', size=10),
-                orientation='h',            # 水平图例
+                orientation='h',
                 yanchor='bottom',
-                y=1.02,                     # 放在图表上方
+                y=1.02,
                 xanchor='center',
                 x=0.5
             ),
             title="近7日送花趋势对比",
-            xaxis_title="日期",
-            yaxis_title="送花数量",
-            hovermode="closest",
+            xaxis=dict(
+                title="日期",
+                fixedrange=True,      # 禁止水平拖动/缩放
+                showgrid=True,
+                gridcolor='lightgray'
+            ),
+            yaxis=dict(
+                title="送花数量",
+                fixedrange=True,      # 禁止垂直拖动/缩放
+                showgrid=True,
+                gridcolor='lightgray'
+            ),
             plot_bgcolor='rgba(0,0,0,0)',
             paper_bgcolor='rgba(0,0,0,0)',
             font=dict(color='black', size=11)
         )
-        # 坐标网格
-        fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='lightgray', tickangle=0)
-        fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='lightgray')
-        # 使用容器宽度并启用响应式
-        st.plotly_chart(fig, use_container_width=True, config={'responsive': True, 'displayModeBar': False})
+        
+        # 禁用缩放和工具栏
+        config = {
+            'displayModeBar': False,
+            'scrollZoom': False,
+            'staticPlot': False,
+            'editable': False
+        }
+        st.plotly_chart(fig, use_container_width=True, config=config)
     else:
         st.info("暂无有效的趋势数据")
 else:
     st.info("当前数据不含趋势字段")
 
-# ----- 柱状图（保持不变）-----
+# ----- 柱状图 -----
 st.subheader("📊 今日送花排行柱状图（按送花数量排序）")
 df_chart = df.sort_values("今日送花", ascending=False).reset_index(drop=True)
 bar_colors = [COLOR_MAP.get(name, DEFAULT_COLOR) for name in df_chart["姓名"]]
@@ -297,4 +323,4 @@ plt.tight_layout()
 st.pyplot(fig)
 
 st.markdown("---")
-st.caption("💡 页面每5分钟自动刷新。折线图已针对手机优化，自动缩放并显示完整图例。")
+st.caption("💡 页面每5分钟自动刷新。折线图已锁定范围，不可滑动/缩放。")
