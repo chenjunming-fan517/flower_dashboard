@@ -13,11 +13,15 @@ CACHE_TTL_SECONDS = 25
 st.set_page_config(page_title="送花数据分析看板", page_icon="🌸", layout="wide")
 st.markdown(f'<meta http-equiv="refresh" content="{AUTO_REFRESH_SECONDS}">', unsafe_allow_html=True)
 
-# ==================== 全屏固定水印（基于网格平铺，100%可靠） ====================
+# ==================== 可靠水印（SVG背景平铺，固定，不滚动） ====================
 watermark_text = "陈浚铭四代第一门面"
+# 转义 SVG 中的特殊字符
+svg_str = f'<svg xmlns="http://www.w3.org/2000/svg" width="200" height="120"><text x="50%" y="50%" font-size="22" fill="#cccccc" opacity="0.35" font-family="Microsoft YaHei, sans-serif" text-anchor="middle" dominant-baseline="middle" transform="rotate(-20,100,60)">{watermark_text}</text></svg>'
+import base64
+b64 = base64.b64encode(svg_str.encode('utf-8')).decode('utf-8')
 watermark_css = f"""
 <style>
-.watermark-layer {{
+.watermark {{
     position: fixed;
     top: 0;
     left: 0;
@@ -25,42 +29,13 @@ watermark_css = f"""
     height: 100%;
     pointer-events: none;
     z-index: 9999;
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 250px));
-    justify-content: center;
-    align-items: center;
-    opacity: 0.25;
-    transform: rotate(-20deg);
-}}
-.watermark-item {{
-    font-size: 20px;
-    font-weight: bold;
-    color: #aaa;
-    font-family: 'Microsoft YaHei', sans-serif;
-    white-space: nowrap;
-    text-align: center;
-    padding: 30px 0;
-    user-select: none;
+    background-image: url("data:image/svg+xml;base64,{b64}");
+    background-repeat: repeat;
+    background-size: 200px 120px;
+    opacity: 0.6;
 }}
 </style>
-<div class="watermark-layer" id="watermark-layer"></div>
-<script>
-    (function() {{
-        const layer = document.getElementById('watermark-layer');
-        if (!layer) return;
-        // 清空可能已有的内容（防止重复）
-        layer.innerHTML = '';
-        const colCount = Math.ceil(window.innerWidth / 220);
-        const rowCount = Math.ceil(window.innerHeight / 90);
-        const total = colCount * rowCount;
-        for (let i = 0; i < total; i++) {{
-            const div = document.createElement('div');
-            div.className = 'watermark-item';
-            div.innerText = '{watermark_text}';
-            layer.appendChild(div);
-        }}
-    }})();
-</script>
+<div class="watermark"></div>
 """
 st.markdown(watermark_css, unsafe_allow_html=True)
 
@@ -191,7 +166,7 @@ if data_time:
     else:
         st.info(f"📅 数据获取时间（本地）：{data_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
-# ==================== 卡片式排行榜（手机压缩版，7人一屏） ====================
+# ==================== 卡片式排行榜（手机压缩版） ====================
 st.subheader("🏆 送花排行榜")
 
 st.markdown("""
