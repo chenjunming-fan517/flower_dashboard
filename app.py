@@ -186,10 +186,14 @@ if data_time:
 # ==================== 表格（完全复现图示样式） ====================
 st.subheader("🏆 送花排行榜")
 
-# 构建表格HTML
 def format_number(n):
-    return f"{n:,}"
+    """将数字格式化为带千位分隔符的字符串"""
+    try:
+        return f"{int(n):,}"
+    except:
+        return str(n)
 
+# 构建表格 HTML（已修正所有标签错误）
 table_html = """
 <style>
 .rank-table {
@@ -237,37 +241,39 @@ table_html = """
 </style>
 <table class="rank-table">
     <thead>
-        <tr><th>姓名</th><th>今日送花</th><th>今日人数</th><th>人均</th></tr>
+        <tr><th>名称</th><th>今日送花</th><th>今日人数</th><th>人均</th></tr>
     </thead>
     <tbody>
 """
 
 for _, row in df.iterrows():
     name = row["姓名"]
-    today = format_number(int(row["今日送花"]))
-    people = format_number(int(row["今日总人数"]))
+    today = format_number(row["今日送花"])
+    people = format_number(row["今日总人数"])
     avg = row["人均送花"]
-    total_history = format_number(int(row["历史总数"])) if "历史总数" in row else "0"
-    delta_gift = format_number(int(row["今日增量送花"])) if "今日增量送花" in row else "0"
-    delta_people = format_number(int(row["今日增量人数"])) if "今日增量人数" in row else "0"
+    
+    # 处理可能缺失的列
+    total_history = format_number(row["历史总数"]) if "历史总数" in row and pd.notna(row["历史总数"]) else "0"
+    delta_gift = format_number(row["今日增量送花"]) if "今日增量送花" in row and pd.notna(row["今日增量送花"]) else "0"
+    delta_people = format_number(row["今日增量人数"]) if "今日增量人数" in row and pd.notna(row["今日增量人数"]) else "0"
 
-    # 主行
+    # 主行（已修正：去除错误的 。”</tr>）
     table_html += f"""
         <tr class="main-row">
             <td>{name}</td>
             <td>{today}</td>
             <td>{people}</td>
             <td>{avg}</td>
-        。”</tr>
+        </tr>
     """
-    # 副行
+    # 副行（已修正：使用正确的闭合标签 </tr>）
     table_html += f"""
         <tr class="sub-row">
             <td>📜 历史总数 {total_history}</td>
             <td><span class="delta">^ {delta_gift}</span></td>
             <td><span class="delta">^ {delta_people}</span></td>
             <td></td>
-        <tr>
+        </tr>
     """
 
 table_html += """
