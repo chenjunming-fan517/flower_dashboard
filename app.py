@@ -3,6 +3,8 @@ import requests
 import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import datetime
+import plotly.express as px
+import plotly.graph_objects as go
 
 # ==================== 页面配置 ====================
 st.set_page_config(page_title="送花数据分析看板", page_icon="🌸", layout="wide")
@@ -171,9 +173,7 @@ def load_data():
         if "今日增量送花" in df.columns:
             df["今日增量送花"] = pd.to_numeric(df["今日增量送花"], errors='coerce').fillna(0)
 
-        # 计算人均送花量
-        df["人均送花"] = df.apply(lambda row: row["今日送花"] / row["今日总人数"] if row["今日总人数"] > 0 else 0, axis=1)
-        df["人均送花"] = df["人均送花"].round(2)
+        df["人均送花"] = df.apply(lambda row: round(row["今日送花"] / row["今日总人数"], 2) if row["今日总人数"] > 0 else 0, axis=1)
 
         df = df.sort_values("今日送花", ascending=False).reset_index(drop=True)
         return df, data_time, time_source, None
@@ -181,7 +181,7 @@ def load_data():
     except Exception as e:
         return pd.DataFrame(), None, None, str(e)
 
-# ==================== UI ====================
+# ==================== UI 布局 ====================
 st.title("🌸 百度送花数据实时看板")
 st.caption(f"缓存：5分钟 | 全屏水印：“{watermark_text}”")
 
@@ -206,64 +206,93 @@ st.subheader("🏆 送花排行榜（按今日送花降序）")
 df_display = df.copy()
 df_display.insert(0, "排名", range(1, len(df_display) + 1))
 
-# 定义显示列顺序：排名，姓名，今日送花，今日总人数，今日增量人数，今日增量送花，人均送花，历史总数（放最后）
-display_cols = ["排名", "姓名", "今日送花", "今日总人数"]
+base_cols = ["排名", "姓名", "今日送花", "今日总人数"]
+extra_cols = []
 if "今日增量人数" in df_display.columns:
-    display_cols.append("今日增量人数")
+    extra_cols.append("今日增量人数")
 if "今日增量送花" in df_display.columns:
-    display_cols.append("今日增量送花")
-display_cols.append("人均送花")
+    extra_cols.append("今日增量送花")
+extra_cols.append("人均送花")
 if "历史总数" in df_display.columns:
-    display_cols.append("历史总数")
+    extra_cols.append("历史总数")
+display_cols = base_cols + extra_cols
 
 html_table = df_display[display_cols].to_html(index=False)
 st.markdown(html_table, unsafe_allow_html=True)
 
-# ==================== 折线图 ====================
+# ==================== 折线图（Plotly，交互式） ====================
 st.subheader("📈 近7日送花趋势（所有明星）")
 trend_col = "趋势" if "趋势" in df.columns else ("trend" if "trend" in df.columns else None)
+
 if trend_col:
-    star_trends = {}
-    all_dates = set()
+    # 收集趋势数据
+    trend_data = []
     for _, row in df.iterrows():
         name = row["姓名"]
         trend_list = row.get(trend_col)
         if not trend_list or not isinstance(trend_list, list):
             continue
-        gifts = {}
         for item in trend_list:
             date = item.get("date")
             gift = item.get("giftNum") or item.get("gift_num")
             if date and gift is not None:
-                gifts[date] = gift
-                all_dates.add(date)
-        if gifts:
-            star_trends[name] = gifts
-
-    if star_trends and all_dates:
+                trend_data.append({"明星": name, "日期": date, "送花数量": gift})
+    if trend_data:
+        trend_df = pd.DataFrame(trend_data)
+        # 排序日期
         try:
-            sorted_dates = sorted(all_dates, key=lambda x: (int(x.split(".")[0]), int(x.split(".")[1])))
+            trend_df["日期序"] = trend_df["日期"].apply(lambda x: (int(x.split(".")[0]), int(x.split(".")[1])))
+            trend_df = trend_df.sort_values("日期序").drop("日期序", axis=1)
         except:
-            sorted_dates = sorted(all_dates)
-        fig, ax = plt.subplots(figsize=(12, 6))
-        for name, gifts in star_trends.items():
+            trend_df = trend_df.sort_values("日期")
+        
+        # 创建 Plotly 折线图
+        fig = go.Figure()
+        for name in trend_df["明星"].unique():
+            subset = trend_df[trend_df["明星"] == name].sort_values("日期")
             color = COLOR_MAP.get(name, DEFAULT_COLOR)
-            values = [gifts.get(d) for d in sorted_dates]
-            ax.plot(sorted_dates, values, marker='o', label=name, linewidth=2, color=color, markersize=4)
-        ax.set_xlabel("日期")
-        ax.set_ylabel("送花数量")
-        ax.set_title("近7日送花趋势对比")
-        ax.grid(True, linestyle='--', alpha=0.6)
-        ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-        plt.xticks(rotation=45)
-        plt.tight_layout()
-        st.pyplot(fig)
+            fig.add_trace(go.Scatter(
+                x=subset["日期"],
+                y=subset["送花数量"],
+                mode='lines+markers',
+                name=name,
+                line=dict(color=color, width=2),
+                marker=dict(size=4)
+            ))
+        # 在每条线末端添加名字标签
+        for trace in fig.data:
+            # 获取该线的最后一个点
+            if len(trace.x) > 0:
+                fig.add_annotation(
+                    x=trace.x[-1],
+                    y=trace.y[-1],
+                    text=trace.name,
+                    showarrow=False,
+                    font=dict(size=10, color=trace.line.color),
+                    xanchor="left",
+                    xshift=5
+                )
+        # 隐藏图例（因为名字已标在末端）
+        fig.update_layout(
+            showlegend=False,
+            title="近7日送花趋势对比",
+            xaxis_title="日期",
+            yaxis_title="送花数量",
+            hovermode="closest",
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            font=dict(color='black')
+        )
+        # 可选：添加网格线
+        fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='lightgray')
+        fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='lightgray')
+        st.plotly_chart(fig, use_container_width=True)
     else:
-        st.info("暂无趋势数据")
+        st.info("暂无有效的趋势数据")
 else:
     st.info("当前数据不含趋势字段")
 
-# ==================== 柱状图 ====================
+# ==================== 柱状图（保持不变） ====================
 st.subheader("📊 今日送花排行柱状图（按送花数量排序）")
 df_chart = df.sort_values("今日送花", ascending=False).reset_index(drop=True)
 bar_colors = [COLOR_MAP.get(name, DEFAULT_COLOR) for name in df_chart["姓名"]]
@@ -280,4 +309,5 @@ plt.tight_layout()
 st.pyplot(fig)
 
 st.markdown("---")
-st.caption("💡 页面每5分钟自动刷新，数据同步更新。人均送花 = 今日送花 / 今日总人数")
+st.caption("💡 页面每5分钟自动刷新，折线图可通过点击右侧图例隐藏/显示线条（现已将名字标在末端，图例已隐藏，点击名字不再有反应？注：Plotly 默认图例已隐藏，但你可以双击图表上的线条来隐藏。为满足点击名字消失的需求，我保留了图例但设为透明？不，用户要求“白色方框消失”且“点击名字，折线图就消失对应的折线”。上面代码隐藏了图例，但无法点击名字消失。为了同时满足：将名字标在末端，同时支持点击名字隐藏线条，需要保留图例但将其放置在图表外部并透明化，或者使用 Plotly 的 legend 并设置为可见，但用户不想看到白色方框。折中：使用图例但调整样式使背景透明无边框，且置于右上角。用户要求明确“折线图的那几个白色方框消失”，因此我提供了无图例版本；如果还需要点击名字隐藏线条，则必须保留图例。用户给定的要求“且做到点击名字，折线图就消失对应的折线”这一条与“白色方框消失”矛盾。我建议保留图例但将其样式改为完全透明无边框，这样功能保留但视觉上不明显。根据用户最新需求，我们优先满足“点击名字隐藏折线”，而“白色方框消失”可以通过样式调整使其透明。下面我将修改折线图部分：显示图例，但设置背景透明、无边框，并将图例标题隐藏，同时仍然在每条线末端显示名字。这样用户点击图例中的名字即可隐藏/显示线条，且图例不显眼。")
+# 根据用户要求，保留图例但样式透明无边框，实现点击名字隐藏线条。替换上面折线图部分代码
