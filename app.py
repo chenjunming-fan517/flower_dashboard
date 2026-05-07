@@ -195,8 +195,7 @@ if data_time:
     else:
         st.info(f"📅 数据获取时间（本地）：{data_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
-# ==================== 卡片式排行榜 ====================
-# ==================== 卡片式排行榜（对齐版本） ====================
+# ==================== 卡片式排行榜（对齐版本，带表头） ====================
 st.subheader("🏆 送花排行榜")
 
 # 自定义 CSS：实现两行四列对齐
@@ -242,6 +241,16 @@ st.markdown("""
     color: #10b981;
     font-weight: 500;
 }
+/* 表头样式 */
+.rank-header {
+    background: #f1f5f9;
+    border-radius: 12px;
+    padding: 10px 16px;
+    margin-bottom: 12px;
+    font-weight: 600;
+    color: #0f172a;
+    border: 1px solid #e2e8f0;
+}
 /* 手机屏幕适配：列宽自动，不堆叠 */
 @media (max-width: 640px) {
     .rank-row {
@@ -254,8 +263,24 @@ st.markdown("""
     .rank-row.sub {
         font-size: 0.7rem;
     }
+    .rank-header {
+        font-size: 0.8rem;
+        padding: 6px 12px;
+    }
 }
 </style>
+""", unsafe_allow_html=True)
+
+# 表头行（列名）
+st.markdown("""
+<div class="rank-header">
+    <div class="rank-row" style="margin-bottom:0;">
+        <div class="rank-cell">姓名</div>
+        <div class="rank-cell">今日送花</div>
+        <div class="rank-cell">今日人数</div>
+        <div class="rank-cell">人均</div>
+    </div>
+</div>
 """, unsafe_allow_html=True)
 
 # 循环生成每个明星的卡片
@@ -274,7 +299,6 @@ for _, row in df.iterrows():
     delta_gift_fmt = f"{delta_gift:,}"
     delta_people_fmt = f"{delta_people:,}"
 
-    # 构建卡片（两行四列）
     card_html = f"""
     <div class="rank-card">
         <div class="rank-row">
@@ -287,13 +311,11 @@ for _, row in df.iterrows():
             <div class="rank-cell">📜 历史总数 {total_fmt}</div>
             <div class="rank-cell">📈 增量送花 <span class="delta">↑ {delta_gift_fmt}</span></div>
             <div class="rank-cell">👤 增量人数 <span class="delta">↑ {delta_people_fmt}</span></div>
-            <div class="rank-cell"></div>  <!-- 人均下方留空 -->
+            <div class="rank-cell"></div>
         </div>
     </div>
     """
-    st.markdown(card_html, unsafe_allow_html=True)
-
-# ==================== 折线图 ====================
+    st.markdown(card_html, unsafe_allow_html=True)# ==================== 折线图 ====================
 st.subheader("📈 近7日送花趋势对比")
 trend_col = "趋势" if "趋势" in df.columns else ("trend" if "trend" in df.columns else None)
 
