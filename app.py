@@ -102,17 +102,6 @@ def smart_extract_time(obj):
     return None
 
 def auto_map_columns(df):
-    """
-    智能映射列名，区分总人数和增量人数。
-    标准列名及优先级关键词：
-    - 姓名: name, 姓名, star_name
-    - 今日送花: today_gift, today, 今日送花, gift_today
-    - 历史总数: total_gift, total, 历史总数, total_flowers
-    - 今日总人数: today_users, total_users, people, user_count, 今日人数
-    - 今日增量人数: delta_users, new_users, increase_users
-    - 今日增量送花: delta_gift, delta, 增量送花
-    - 趋势: trend, 趋势
-    """
     mapping_rules = {
         "姓名": ["name", "姓名", "star_name"],
         "今日送花": ["today_gift", "today", "今日送花", "gift_today", "flower_today"],
@@ -122,7 +111,6 @@ def auto_map_columns(df):
         "今日增量送花": ["delta_gift", "delta", "增量送花"],
         "趋势": ["trend", "趋势"]
     }
-    
     rename_dict = {}
     used_cols = set()
     for std_name, keywords in mapping_rules.items():
@@ -134,10 +122,7 @@ def auto_map_columns(df):
                 rename_dict[col] = std_name
                 used_cols.add(col)
                 break
-    
     df_renamed = df.rename(columns=rename_dict)
-    
-    # 去除可能因重名导致的重复列（保留第一个）
     for std_name in mapping_rules.keys():
         if std_name in df_renamed.columns:
             matching = [c for c in df_renamed.columns if c == std_name]
@@ -146,7 +131,6 @@ def auto_map_columns(df):
                 df_renamed = df_renamed[keep_cols]
     return df_renamed
 
-# ==================== 数据加载 ====================
 @st.cache_data(ttl=300)
 def load_data():
     try:
@@ -169,7 +153,6 @@ def load_data():
 
         df = auto_map_columns(df)
 
-        # 必要列兜底
         if "姓名" not in df.columns:
             df["姓名"] = [f"明星{i}" for i in range(len(df))]
         if "今日送花" not in df.columns:
@@ -179,14 +162,18 @@ def load_data():
             else:
                 df["今日送花"] = 0
         if "今日总人数" not in df.columns:
-            # 尝试找任意数字列作为总人数（如果缺失则设为0）
             df["今日总人数"] = 0
 
-        # 确保数值类型
         df["今日送花"] = pd.to_numeric(df["今日送花"], errors='coerce').fillna(0)
         df["今日总人数"] = pd.to_numeric(df["今日总人数"], errors='coerce').fillna(0)
         if "今日增量人数" in df.columns:
             df["今日增量人数"] = pd.to_numeric(df["今日增量人数"], errors='coerce').fillna(0)
+        if "今日增量送花" in df.columns:
+            df["今日增量送花"] = pd.to_numeric(df["今日增量送花"], errors='coerce').fillna(0)
+
+        # 计算人均送花量
+        df["人均送花"] = df.apply(lambda row: row["今日送花"] / row["今日总人数"] if row["今日总人数"] > 0 else 0, axis=1)
+        df["人均送花"] = df["人均送花"].round(2)
 
         df = df.sort_values("今日送花", ascending=False).reset_index(drop=True)
         return df, data_time, time_source, None
@@ -208,7 +195,6 @@ if df.empty:
     st.warning("未获取到有效数据")
     st.stop()
 
-# 显示更新时间
 if data_time:
     if time_source == "api":
         st.info(f"📅 数据最后更新时间（接口提供）：{data_time.strftime('%Y-%m-%d %H:%M:%S')}")
@@ -220,13 +206,15 @@ st.subheader("🏆 送花排行榜（按今日送花降序）")
 df_display = df.copy()
 df_display.insert(0, "排名", range(1, len(df_display) + 1))
 
+# 定义显示列顺序：排名，姓名，今日送花，今日总人数，今日增量人数，今日增量送花，人均送花，历史总数（放最后）
 display_cols = ["排名", "姓名", "今日送花", "今日总人数"]
-if "历史总数" in df_display.columns:
-    display_cols.append("历史总数")
 if "今日增量人数" in df_display.columns:
     display_cols.append("今日增量人数")
 if "今日增量送花" in df_display.columns:
     display_cols.append("今日增量送花")
+display_cols.append("人均送花")
+if "历史总数" in df_display.columns:
+    display_cols.append("历史总数")
 
 html_table = df_display[display_cols].to_html(index=False)
 st.markdown(html_table, unsafe_allow_html=True)
@@ -292,65 +280,4 @@ plt.tight_layout()
 st.pyplot(fig)
 
 st.markdown("---")
-st.caption("💡 页面每5分钟自动刷新，数据同步更新。表格中「今日总人数」为当日送花参与总人数。")
-
-# ==================== 折线图 ====================
-st.subheader("📈 近7日送花趋势（所有明星）")
-trend_col = "趋势" if "趋势" in df.columns else ("trend" if "trend" in df.columns else None)
-
-if trend_col:
-    star_trends = {}
-    all_dates = set()
-    for _, row in df.iterrows():
-        name = row["姓名"]
-        trend_list = row.get(trend_col)
-        if not trend_list or not isinstance(trend_list, list):
-            continue
-        gifts_by_date = {}
-        for item in trend_list:
-            date = item.get("date")
-            gift = item.get("giftNum") or item.get("gift_num")
-            if date and gift is not None:
-                gifts_by_date[date] = gift
-                all_dates.add(date)
-        if gifts_by_date:
-            star_trends[name] = gifts_by_date
-
-    if star_trends and all_dates:
-        sorted_dates = sorted(all_dates, key=lambda x: (int(x.split(".")[0]), int(x.split(".")[1])))
-        fig, ax = plt.subplots(figsize=(12, 6))
-        for name, gifts in star_trends.items():
-            color = COLOR_MAP.get(name, DEFAULT_COLOR)
-            values = [gifts.get(d) for d in sorted_dates]
-            ax.plot(sorted_dates, values, marker='o', label=name, linewidth=2, color=color, markersize=4)
-        ax.set_xlabel("日期")
-        ax.set_ylabel("送花数量")
-        ax.set_title("近7日送花趋势对比")
-        ax.grid(True, linestyle='--', alpha=0.6)
-        ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-        plt.xticks(rotation=45)
-        plt.tight_layout()
-        st.pyplot(fig)
-    else:
-        st.info("暂无有效的趋势数据")
-else:
-    st.info("当前数据不含趋势字段")
-
-# ==================== 柱状图 ====================
-st.subheader("📊 今日送花排行柱状图（按送花数量排序）")
-df_chart = df.sort_values("今日送花", ascending=False).reset_index(drop=True)
-bar_colors = [COLOR_MAP.get(name, DEFAULT_COLOR) for name in df_chart["姓名"]]
-fig_width = max(8, len(df_chart) * 0.6)
-fig, ax = plt.subplots(figsize=(fig_width, 6))
-bars = ax.bar(df_chart["姓名"], df_chart["今日送花"], color=bar_colors)
-ax.bar_label(bars, fmt='%d', label_type='edge', padding=2, fontsize=9)
-ax.set_xticks(range(len(df_chart)))
-ax.set_xticklabels(df_chart["姓名"], rotation=45, ha='right', fontsize=10)
-ax.set_xlabel("明星")
-ax.set_ylabel("送花数量")
-ax.set_title("今日送花排行榜（专属颜色）")
-plt.tight_layout()
-st.pyplot(fig)
-
-st.markdown("---")
-st.caption("💡 页面每5分钟自动刷新，数据同步更新。")
+st.caption("💡 页面每5分钟自动刷新，数据同步更新。人均送花 = 今日送花 / 今日总人数")
