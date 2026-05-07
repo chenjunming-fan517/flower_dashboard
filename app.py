@@ -361,30 +361,3 @@ if trend_col:
 else:
     st.info("当前数据不含趋势字段")
 
-# ==================== 柱状图（带颜色图例） ====================
-st.subheader("📊 今日送花排行柱状图（按送花数量排序）")
-df_chart = df.sort_values("今日送花", ascending=False).reset_index(drop=True)
-bar_colors = [COLOR_MAP.get(name, DEFAULT_COLOR) for name in df_chart["姓名"]]
-
-fig_width = max(8, len(df_chart) * 0.6)
-fig, ax = plt.subplots(figsize=(fig_width, 6))
-bars = ax.bar(df_chart["姓名"], df_chart["今日送花"], color=bar_colors)
-ax.bar_label(bars, fmt='%d', label_type='edge', padding=2, fontsize=9)
-ax.set_xticks(range(len(df_chart)))
-ax.set_xticklabels(df_chart["姓名"], rotation=45, ha='right', fontsize=10)
-ax.set_xlabel("明星")
-ax.set_ylabel("送花数量")
-ax.set_title("今日送花排行榜")
-
-# 添加颜色图例：为每个姓名生成一个色块图例
-legend_patches = []
-for name in df_chart["姓名"]:
-    color = COLOR_MAP.get(name, DEFAULT_COLOR)
-    legend_patches.append(mpatches.Patch(color=color, label=name))
-ax.legend(handles=legend_patches, loc='upper left', bbox_to_anchor=(1.02, 1), title="明星颜色", fontsize=8)
-
-plt.tight_layout()
-st.pyplot(fig)
-
-st.markdown("---")
-st.caption(f"💡 页面每 {AUTO_REFRESH_SECONDS} 秒自动刷新，数据缓存 {CACHE_TTL_SECONDS} 秒。柱状图右侧图例显示各明星对应颜色。")
