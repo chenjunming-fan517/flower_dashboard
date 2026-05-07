@@ -5,15 +5,12 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 import plotly.graph_objects as go
 
-# ==================== 配置区域 ====================
-AUTO_REFRESH_SECONDS = 30
-CACHE_TTL_SECONDS = 25
-# ================================================
-
 st.set_page_config(page_title="送花数据分析看板", page_icon="🌸", layout="wide")
-st.markdown(f'<meta http-equiv="refresh" content="{AUTO_REFRESH_SECONDS}">', unsafe_allow_html=True)
 
-# 水印（保持不变）
+# 自动刷新页面（每60秒）
+st.markdown('<meta http-equiv="refresh" content="60">', unsafe_allow_html=True)
+
+# ==================== 水印 ====================
 watermark_text = "陈浚铭四代第一门面"
 watermark_css = f"""
 <style>
@@ -66,12 +63,18 @@ st.markdown(watermark_css, unsafe_allow_html=True)
 
 # 颜色映射
 COLOR_MAP = {
-    "王橹杰": "#06B6D4", "张函瑞": "#10B981", "张桂源": "#F59E0B",
-    "杨博文": "#EC4899", "左奇函": "#3B82F6", "陈奕恒": "#8B5CF6", "陈浚铭": "#EF4444"
+    "王橹杰": "#06B6D4",
+    "张函瑞": "#10B981",
+    "张桂源": "#F59E0B",
+    "杨博文": "#EC4899",
+    "左奇函": "#3B82F6",
+    "陈奕恒": "#8B5CF6",
+    "陈浚铭": "#EF4444",
 }
 DEFAULT_COLOR = "#888888"
 API_URL = "http://47.109.181.0/api/data"
 
+# 解析函数
 def smart_find_list(obj):
     if isinstance(obj, list):
         return obj
@@ -126,7 +129,7 @@ def auto_map_columns(df):
                 df_renamed = df_renamed[keep_cols]
     return df_renamed
 
-@st.cache_data(ttl=CACHE_TTL_SECONDS)
+@st.cache_data(ttl=60)
 def load_data():
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
@@ -148,7 +151,10 @@ def load_data():
             df["姓名"] = [f"明星{i}" for i in range(len(df))]
         if "今日送花" not in df.columns:
             num_cols = df.select_dtypes(include=['number']).columns
-            df["今日送花"] = df[num_cols[0]] if len(num_cols) > 0 else 0
+            if len(num_cols) > 0:
+                df["今日送花"] = df[num_cols[0]]
+            else:
+                df["今日送花"] = 0
         if "今日总人数" not in df.columns:
             df["今日总人数"] = 0
         df["今日送花"] = pd.to_numeric(df["今日送花"], errors='coerce').fillna(0)
@@ -163,8 +169,9 @@ def load_data():
     except Exception as e:
         return pd.DataFrame(), None, None, str(e)
 
+# ==================== 界面 ====================
 st.title("🌸 百度送花数据实时看板")
-st.caption(f"缓存：{CACHE_TTL_SECONDS}秒 | 自动刷新：{AUTO_REFRESH_SECONDS}秒 | 全屏水印：“{watermark_text}”")
+st.caption(f"缓存：60秒 | 自动刷新：60秒 | 全屏水印：“{watermark_text}”")
 
 with st.spinner("加载中..."):
     df, data_time, time_source, error = load_data()
@@ -182,97 +189,136 @@ if data_time:
     else:
         st.info(f"📅 数据获取时间（本地）：{data_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
-# ==================== 排行榜表格（精确格式） ====================
-st.subheader("🏆 送花排行榜")
+# ---------- 自定义表格：双行样式 ----------
+st.subheader("🏆 送花排行榜（按今日送花降序）")
 
-# 动态生成表格HTML，每个明星占两行
+# 准备数据并格式化
+df_display = df.copy()
+df_display["今日送花_fmt"] = df_display["今日送花"].apply(lambda x: f"{x:,.0f}")
+df_display["今日总人数_fmt"] = df_display["今日总人数"].apply(lambda x: f"{x:,.0f}")
+df_display["人均送花_fmt"] = df_display["人均送花"].apply(lambda x: f"{x:.2f}")
+if "历史总数" in df_display.columns:
+    df_display["历史总数_fmt"] = df_display["历史总数"].apply(lambda x: f"{x:,.0f}")
+else:
+    df_display["历史总数_fmt"] = "—"
+if "今日增量人数" in df_display.columns:
+    df_display["增量人数_fmt"] = df_display["今日增量人数"].apply(lambda x: f"+{x:,.0f}" if x > 0 else f"{x:,.0f}")
+else:
+    df_display["增量人数_fmt"] = ""
+if "今日增量送花" in df_display.columns:
+    df_display["增量送花_fmt"] = df_display["今日增量送花"].apply(lambda x: f"+{x:,.0f}" if x > 0 else f"{x:,.0f}")
+else:
+    df_display["增量送花_fmt"] = ""
+
+# 生成 HTML 表格
 table_html = """
 <style>
-.rank-table {
+.fancy-table {
     width: 100%;
     border-collapse: collapse;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    font-size: 14px;
 }
-.rank-table th, .rank-table td {
-    border-bottom: 1px solid #e2e8f0;
-    padding: 10px 8px;
-    text-align: left;
-    vertical-align: top;
-}
-.rank-table th {
-    background-color: #f8fafc;
+.fancy-table th {
+    text-align: center;
+    padding: 12px 6px;
+    background-color: #f0f2f6;
+    color: #1f1f1f;
     font-weight: 600;
-    color: #1e293b;
-    white-space: nowrap;
+    border-bottom: 1px solid #e0e0e0;
 }
-.rank-table .main-row td {
-    border-bottom: none;
-    padding-bottom: 4px;
+.fancy-table td {
+    padding: 8px 6px;
+    border-bottom: 1px solid #eaeef2;
+    vertical-align: middle;
+}
+.fancy-table .main-row td {
+    background-color: #ffffff;
     font-weight: 500;
 }
-.rank-table .sub-row td {
-    padding-top: 0;
-    font-size: 0.8rem;
-    color: #3b82f6;      /* 增量数据蓝色 */
-    border-bottom: 1px solid #e2e8f0;
+.fancy-table .sub-row td {
+    background-color: #f9fafb;
+    font-size: 13px;
+    color: #4b5563;
+    border-bottom: 1px solid #e5e7eb;
 }
-.rank-table .sub-row td:first-child {
-    color: #475569;       /* 历史总数保持灰色 */
+.fancy-table .sub-row td:first-child {
+    padding-left: 12px;
 }
-/* 手机适配滚动 */
-@media (max-width: 640px) {
-    .rank-table th, .rank-table td {
-        padding: 6px 4px;
-        font-size: 0.85rem;
-    }
-    .rank-table .sub-row td {
-        font-size: 0.75rem;
-    }
+.fancy-table .sub-row td:last-child {
+    text-align: right;
+    padding-right: 12px;
+}
+.fancy-table .star-name {
+    font-weight: 600;
+    color: #1e293b;
+}
+.fancy-table .number {
+    text-align: right;
+    font-family: 'JetBrains Mono', monospace;
+}
+.history-text {
+    font-weight: 500;
+    color: #334155;
+}
+.delta-positive {
+    color: #3b82f6;
+    font-weight: 500;
+    background: #eff6ff;
+    padding: 2px 6px;
+    border-radius: 20px;
+    display: inline-block;
+}
+.delta-cell {
+    text-align: right;
+    white-space: nowrap;
 }
 </style>
-<table class="rank-table">
+
+<table class="fancy-table">
     <thead>
-        <tr><th>姓名</th><th>今日送花</th><th>今日人数</th><th>人均</th></tr>
+        <tr>
+            <th style="text-align:left">名称</th>
+            <th class="number">今日送花</th>
+            <th class="number">今日人数</th>
+            <th class="number">人均</th>
+        </tr>
     </thead>
     <tbody>
 """
 
-for _, row in df.iterrows():
-    name = row["姓名"]
-    today = f"{int(row['今日送花']):,}"
-    people = f"{int(row['今日总人数']):,}"
-    avg = row["人均送花"]
-    total_history = f"{int(row['历史总数']):,}" if "历史总数" in row else "0"
-    delta_gift = f"{int(row['今日增量送花']):,}" if "今日增量送花" in row else "0"
-    delta_people = f"{int(row['今日增量人数']):,}" if "今日增量人数" in row else "0"
-
-    # 主行
+for idx, row in df_display.iterrows():
+    star_name = row["姓名"]
+    today_flower = row["今日送花_fmt"]
+    today_people = row["今日总人数_fmt"]
+    avg_flower = row["人均送花_fmt"]
+    history_total = row["历史总数_fmt"]
+    delta_people = row["增量人数_fmt"]
+    delta_flower = row["增量送花_fmt"]
+    
     table_html += f"""
         <tr class="main-row">
-            <td>{name}</td>
-            <td>{today}</td>
-            <td>{people}</td>
-            <td>{avg}</td>
+            <td class="star-name">{star_name}</td>
+            <td class="number">{today_flower}</td>
+            <td class="number">{today_people}</td>
+            <td class="number">{avg_flower}</td>
         </tr>
-    """
-    # 副行：历史总数在姓名下方，增量送花在今日送花下方（带 ^ 蓝色），增量人数在今日人数下方（带 ^ 蓝色），人均下方留空
-    table_html += f"""
         <tr class="sub-row">
-            <td>📜 历史总数 {total_history}</td>
-            <td style="color:#3b82f6;">^ {delta_gift}</td>
-            <td style="color:#3b82f6;">^ {delta_people}</td>
+            <td colspan="1"><span class="history-text">历史总数: {history_total}</span></td>
+            <td colspan="1" class="delta-cell">{f'<span class="delta-positive">{delta_people}</span>' if delta_people else ''}</td>
+            <td colspan="1" class="delta-cell">{f'<span class="delta-positive">{delta_flower}</span>' if delta_flower else ''}</td>
             <td></td>
         </tr>
     """
-
 table_html += """
     </tbody>
 </table>
 """
+
 st.markdown(table_html, unsafe_allow_html=True)
 
-# ==================== 折线图 ====================
-st.subheader("📈 近7日送花趋势对比")
+# 折线图（删除内部标题，只保留 subheader）
+st.subheader("📈 近7日送花趋势（所有明星）")
 trend_col = "趋势" if "趋势" in df.columns else ("trend" if "trend" in df.columns else None)
 
 if trend_col:
@@ -307,13 +353,34 @@ if trend_col:
                 line=dict(color=color, width=2),
                 marker=dict(size=4)
             ))
-        fig.update_xaxes(tickvals=all_dates, ticktext=all_dates, tickangle=0, fixedrange=True, showgrid=True, gridcolor='lightgray')
+        fig.update_xaxes(
+            tickvals=all_dates,
+            ticktext=all_dates,
+            tickangle=0,
+            fixedrange=True,
+            showgrid=True,
+            gridcolor='lightgray'
+        )
         fig.update_yaxes(fixedrange=True, showgrid=True, gridcolor='lightgray')
         fig.update_layout(
-            autosize=True, margin=dict(l=20, r=20, t=40, b=40),
-            legend=dict(bgcolor='rgba(0,0,0,0)', bordercolor='rgba(0,0,0,0)', title=None, font=dict(color='black', size=10), orientation='h', yanchor='bottom', y=1.02, xanchor='center', x=0.5),
-            xaxis_title="日期", yaxis_title="送花数量",
-            plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)'
+            autosize=True,
+            margin=dict(l=20, r=20, t=40, b=40),
+            legend=dict(
+                bgcolor='rgba(0,0,0,0)',
+                bordercolor='rgba(0,0,0,0)',
+                title=None,
+                font=dict(color='black', size=10),
+                orientation='h',
+                yanchor='bottom',
+                y=1.02,
+                xanchor='center',
+                x=0.5
+            ),
+            title=None,   # 内部标题已删除
+            xaxis_title="日期",
+            yaxis_title="送花数量",
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)'
         )
         config = {'displayModeBar': False, 'scrollZoom': False}
         st.plotly_chart(fig, use_container_width=True, config=config)
@@ -322,7 +389,7 @@ if trend_col:
 else:
     st.info("当前数据不含趋势字段")
 
-# ==================== 柱状图 ====================
+# 柱状图
 st.subheader("📊 今日送花排行柱状图（按送花数量排序）")
 df_chart = df.sort_values("今日送花", ascending=False).reset_index(drop=True)
 bar_colors = [COLOR_MAP.get(name, DEFAULT_COLOR) for name in df_chart["姓名"]]
@@ -339,4 +406,4 @@ plt.tight_layout()
 st.pyplot(fig)
 
 st.markdown("---")
-st.caption(f"💡 页面每 {AUTO_REFRESH_SECONDS} 秒自动刷新，数据缓存 {CACHE_TTL_SECONDS} 秒。数据源更新后最晚 {AUTO_REFRESH_SECONDS} 秒内同步显示。")
+st.caption("💡 页面每60秒自动刷新，数据缓存60秒。数据源更新后，网页最晚60秒内自动显示最新数据。")
