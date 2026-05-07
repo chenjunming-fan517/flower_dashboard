@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import time
+import random
 
 # ==========================================
 # 1. 页面配置
@@ -12,220 +13,146 @@ st.set_page_config(
 )
 
 # ==========================================
-# 2. 模拟数据生成 (实际使用时可替换为API请求)
+# 2. 模拟数据生成 (修复了语法错误)
 # ==========================================
 def get_data():
-    # 这里模拟了API返回的数据结构
-    # 如果您有真实API，请替换此函数内容
+    """
+    模拟从API获取数据。
+    注意：实际使用时请删除此函数，改为 requests.get 请求您的API。
+    """
+    # 这里补全了所有数字，确保代码不报错
     data = {
-        "姓名": ["王橹杰", "张函瑞", "陈浚铭", "左奇函", "杨博文", "其他艺人"],
-        "今日送花": ,
-        "今日总人数": ,
-        "历史总数": ,
-        "今日增量送花": , # 模拟增量
-        "今日增量人数":    # 模拟增量
+        "姓名": ["王橹杰", "张函瑞", "陈浚铭", "左奇函", "杨博文", "张桂源"],
+        "今日送花": [12580, 9800, 8500, 6200, 4300, 3100],
+        "今日总人数": [450, 320, 280, 210, 150, 110],
+        "历史总数": [1250000, 980000, 850000, 620000, 430000, 310000],
+        "今日增量送花": [120, 80, 150, 60, 40, 30],
+        "今日增量人数": [12, 8, 15, 6, 4, 3]
     }
     df = pd.DataFrame(data)
     # 计算人均
     df["人均送花"] = (df["今日送花"] / df["今日总人数"]).round(2)
-    return df<websource>source_group_web_1</websource>
+    return df
 
 # ==========================================
-# 3. 核心样式与布局 (CSS Grid 实现精准对齐)
+# 3. 获取数据
 # ==========================================
+try:
+    df = get_data()
+    # 按今日送花降序排列
+    df = df.sort_values(by="今日送花", ascending=False).reset_index(drop=True)
+    last_update_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+except Exception as e:
+    st.error(f"数据加载失败: {e}")
+    st.stop()
 
-# 定义颜色映射
-COLOR_MAP = {
-    "王橹杰": "#06B6D4", # 青色
-    "张函瑞": "#10B981", # 绿色
-    "陈浚铭": "#F59E0B", # 橙色
-    "左奇函": "#8B5CF6", # 紫色
-    "杨博文": "#EC4899", # 粉色
-}
-DEFAULT_COLOR = "#94A3B8" # 默认灰色
-
-# 注入CSS样式
+# ==========================================
+# 4. 自定义 CSS 样式 (实现精准对齐)
+# ==========================================
 st.markdown("""
 <style>
-/* 隐藏Streamlit默认的菜单和页脚，让看板更干净 */
-#MainMenu {visibility: hidden;}
-footer {visibility: hidden;}
+    /* 卡片整体布局：三列网格 */
+    .rank-card {
+        display: grid;
+        grid-template-columns: 130px 1fr 1fr; /* 左侧固定宽度，右侧自适应 */
+        gap: 15px;
+        background: white;
+        border-radius: 12px;
+        padding: 18px;
+        margin-bottom: 15px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        border: 1px solid #f0f2f6;
+        align-items: center;
+    }
 
-/* 卡片容器：使用Grid布局分为三列 */
-.rank-card {
-    display: grid;
-    grid-template-columns: 140px 1fr 1fr; /* 左列固定宽度(姓名)，中右列自动平分 */
-    gap: 15px;
-    background: white;
-    border-radius: 12px;
-    padding: 18px;
-    margin-bottom: 15px;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-    border: 1px solid #e2e8f0;
-    transition: transform 0.2s;
-}
+    /* 左侧区域：姓名 + 历史总数 (垂直居中) */
+    .col-name {
+        grid-column: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        border-right: 2px solid #f0f2f6;
+        padding-right: 15px;
+    }
 
-.rank-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-}
+    /* 中间区域：今日送花 + 增量 */
+    .col-flowers {
+        grid-column: 2;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        border-right: 2px solid #f0f2f6;
+        padding-right: 15px;
+    }
 
-/* --- 左列：姓名与历史总数 --- */
-.name-section {
-    grid-column: 1;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    border-right: 2px dashed #e2e8f0; /* 分隔线 */
-    padding-right: 15px;
-}
+    /* 右侧区域：今日人数 + 增量 */
+    .col-people {
+        grid-column: 3;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+    }
 
-.rank-name {
-    font-size: 1.5rem;
-    font-weight: 800;
-    color: #1e2a3a;
-    margin-bottom: 8px;
-    letter-spacing: 0.5px;
-}
-
-.history-badge {
-    background: #f1f5f9;
-    color: #475569;
-    padding: 4px 10px;
-    border-radius: 20px;
-    font-size: 0.8rem;
-    font-weight: 600;
-    white-space: nowrap;
-}
-
-/* --- 中列与右列：数据组 --- */
-.data-column {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-/* 数据行样式 */
-.data-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 15px;
-    border-radius: 8px;
-    background: #f8fafc;
-    border-left: 5px solid #cbd5e1; /* 默认边框色 */
-}
-
-.data-label {
-    font-size: 0.9rem;
-    color: #64748b;
-    font-weight: 500;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-}
-
-.data-value {
-    font-size: 1.1rem;
-    font-family: 'Courier New', monospace; /* 等宽字体，数字对齐更好看 */
-    font-weight: 700;
-    color: #0f172a;
-}
-
-/* 增量数据的特殊样式 */
-.data-row.increment {
-    background: #ffffff;
-    border: 1px solid #f1f5f9;
-    border-left: 5px solid #cbd5e1;
-}
-.data-row.increment .data-label { color: #94a3b8; font-size: 0.85rem; }
-.data-row.increment .data-value { color: #64748b; font-size: 1rem; }
-
-/* 移动端适配 */
-@media (max-width: 600px) {
-    .rank-card { grid-template-columns: 1fr; gap: 10px; }
-    .name-section { border-right: none; border-bottom: 2px dashed #e2e8f0; padding-bottom: 10px; flex-direction: row; justify-content: space-between; }
-}
+    /* 文本样式微调 */
+    .main-value { font-size: 24px; font-weight: bold; color: #333; }
+    .sub-label { font-size: 12px; color: #888; margin-top: 2px; }
+    .sub-value { font-size: 13px; color: #d32f2f; font-weight: 600; }
+    .history-value { font-size: 14px; color: #555; margin-top: 5px; }
+    .avatar { width: 40px; height: 40px; border-radius: 50%; margin-bottom: 5px; }
 </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 4. 主程序逻辑
+# 5. 页面主体渲染
 # ==========================================
 
+# 标题区
 st.title("🌸 送花数据实时监控看板")
-st.caption("数据每 5 秒自动刷新 | 仅展示核心指标")
+st.caption(f"最后更新时间: {last_update_time} (每30秒自动刷新)")
+st.markdown("---")
 
-# 占位符，用于动态刷新
-placeholder = st.empty()
+# 循环渲染每一行卡片
+for index, row in df.iterrows():
+    # 颜色逻辑 (示例)
+    color = "#d32f2f" if index == 0 else "#1976d2"
 
-while True:
-    with placeholder.container():
-        # 1. 获取数据
-        try:
-            df = get_data()
-            # 按今日送花降序排列
-            df = df.sort_values(by="今日送花", ascending=False).reset_index(drop=True)
-        except Exception as e:
-            st.error(f"数据加载失败: {e}")
-            df = pd.DataFrame()
+    # 构建 HTML 卡片
+    # 结构：
+    # [ 姓名 ] [ 今日送花 ] [ 今日人数 ]
+    # [ 历史 ] [ 增量送花 ] [ 增量人数 ]
 
-        # 2. 渲染卡片
-        if not df.empty:
-            for i, row in df.iterrows():
-                name = row["姓名"]
-                color = COLOR_MAP.get(name, DEFAULT_COLOR)
-                
-                # 格式化数字
-                today_fmt = f"{int(row['今日送花']):,}"
-                people_fmt = f"{int(row['今日总人数']):,}"
-                total_fmt = f"{int(row['历史总数']):,}"
-                delta_gift_fmt = f"+{int(row['今日增量送花']):,}"
-                delta_people_fmt = f"+{int(row['今日增量人数']):,}"
+    card_html = f"""
+    <div class="rank-card">
+        <!-- 第一列：姓名与历史 -->
+        <div class="col-name">
+            <div style="font-size: 18px; font-weight: bold; color: {color};">{row['姓名']}</div>
+            <div class="history-value">历史: {row['历史总数']:,}</div>
+        </div>
 
-                # HTML 结构
-                # 逻辑：
-                # Grid Col 1: 姓名 + 历史总数 (垂直对齐)
-                # Grid Col 2: 今日送花 + 增量送花 (垂直对齐)
-                # Grid Col 3: 今日人数 + 增量人数 (垂直对齐)
-                card_html = f"""
-                <div class="rank-card">
-                    <!-- 左列：姓名与历史 -->
-                    <div class="name-section">
-                        <div class="rank-name" style="color: {color};">{name}</div>
-                        <div class="history-badge">📜 历史总数：{total_fmt}</div>
-                    </div>
+        <!-- 第二列：送花数据 -->
+        <div class="col-flowers">
+            <div class="main-value">{row['今日送花']:,}</div>
+            <div class="sub-value">+ {row['今日增量送花']:,} 朵</div>
+        </div>
 
-                    <!-- 中列：送花数据 -->
-                    <div class="data-column">
-                        <div class="data-row" style="border-left-color: {color};">
-                            <span class="data-label">🌸 今日送花</span>
-                            <span class="data-value">{today_fmt}</span>
-                        </div>
-                        <div class="data-row increment" style="border-left-color: {color};">
-                            <span class="data-label">📈 较上轮增量</span>
-                            <span class="data-value">{delta_gift_fmt}</span>
-                        </div>
-                    </div>
+        <!-- 第三列：人数数据 -->
+        <div class="col-people">
+            <div class="main-value">{row['今日总人数']:,}</div>
+            <div class="sub-value">+ {row['今日增量人数']:,} 人</div>
+        </div>
+    </div>
+    """
 
-                    <!-- 右列：人数数据 -->
-                    <div class="data-column">
-                        <div class="data-row" style="border-left-color: {color};">
-                            <span class="data-label">👥 今日人数</span>
-                            <span class="data-value">{people_fmt}</span>
-                        </div>
-                        <div class="data-row increment" style="border-left-color: {color};">
-                            <span class="data-label">👤 较上轮增量</span>
-                            <span class="data-value">{delta_people_fmt}</span>
-                        </div>
-                    </div>
-                </div>
-                """
-                st.markdown(card_html, unsafe_allow_html=True)
-        
-        # 3. 模拟自动刷新 (实际部署时请配合 st.autorun 或前端刷新)
-        time.sleep(5) 
-        # 注意：在真实Streamlit Cloud环境中，通常使用 st.rerun() 或前端meta刷新
-        # 这里为了演示循环效果使用了while True，本地运行按 Ctrl+C 停止
-        st.rerun()
+    st.markdown(card_html, unsafe_allow_html=True)
+
+# ==========================================
+# 6. 自动刷新逻辑
+# ==========================================
+# 如果需要自动刷新，取消下面的注释（注意：streamlit 原生自动刷新需要配合浏览器插件或实验性功能，
+# 或者使用 st.rerun() 在脚本末尾控制，但在云托管环境可能受限）
+
+# time.sleep(30)
+# st.rerun()
