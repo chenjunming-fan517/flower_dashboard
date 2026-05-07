@@ -64,7 +64,7 @@ watermark_css = f"""
 """
 st.markdown(watermark_css, unsafe_allow_html=True)
 
-# 颜色映射（用于折线图）
+# 颜色映射（折线图用）
 COLOR_MAP = {
     "王橹杰": "#06B6D4",
     "张函瑞": "#10B981",
@@ -191,7 +191,7 @@ if data_time:
     else:
         st.info(f"📅 数据获取时间（本地）：{data_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
-# ==================== 卡片式排行榜（对齐，带表头，间距调小） ====================
+# ==================== 卡片式排行榜（手机压缩版，7人一屏） ====================
 st.subheader("🏆 送花排行榜")
 
 st.markdown("""
@@ -199,10 +199,9 @@ st.markdown("""
 .rank-card {
     background: white;
     border-radius: 12px;
-    padding: 12px 16px;
-    margin-bottom: 5px;   /* 卡片间距缩小为5px */
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    transition: all 0.2s;
+    padding: 4px 10px;
+    margin-bottom: 4px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }
 .rank-card:hover {
     background: #fafafa;
@@ -211,14 +210,14 @@ st.markdown("""
     display: grid;
     grid-template-columns: 1fr 1fr 1fr 1fr;
     align-items: center;
-    gap: 8px;
-    margin-bottom: 4px;
+    gap: 4px;
+    margin-bottom: 2px;
 }
 .rank-row.sub {
-    margin-top: 6px;
+    margin-top: 2px;
     border-top: 1px dashed #e2e8f0;
-    padding-top: 6px;
-    font-size: 0.75rem;
+    padding-top: 2px;
+    font-size: 0.65rem;
     color: #5a6e85;
 }
 .rank-cell {
@@ -226,11 +225,12 @@ st.markdown("""
 }
 .rank-cell.name {
     font-weight: bold;
-    font-size: 1.1rem;
+    font-size: 0.85rem;
     color: #1e2a3a;
 }
 .rank-cell.today, .rank-cell.people, .rank-cell.avg {
     font-weight: 600;
+    font-size: 0.8rem;
 }
 .rank-cell .delta {
     color: #10b981;
@@ -239,26 +239,33 @@ st.markdown("""
 .rank-header {
     background: #f1f5f9;
     border-radius: 12px;
-    padding: 10px 16px;
-    margin-bottom: 12px;
+    padding: 4px 10px;
+    margin-bottom: 6px;
     font-weight: 600;
     color: #0f172a;
     border: 1px solid #e2e8f0;
+    font-size: 0.7rem;
 }
 @media (max-width: 640px) {
-    .rank-row {
-        grid-template-columns: 1fr 1fr 1fr 1fr;
-        gap: 6px;
+    .rank-card {
+        padding: 2px 8px;
+        margin-bottom: 2px;
     }
-    .rank-cell {
-        font-size: 0.8rem;
+    .rank-row {
+        gap: 2px;
     }
     .rank-row.sub {
+        font-size: 0.6rem;
+    }
+    .rank-cell.name {
+        font-size: 0.75rem;
+    }
+    .rank-cell.today, .rank-cell.people, .rank-cell.avg {
         font-size: 0.7rem;
     }
     .rank-header {
-        font-size: 0.8rem;
-        padding: 6px 12px;
+        padding: 2px 8px;
+        font-size: 0.65rem;
     }
 }
 </style>
