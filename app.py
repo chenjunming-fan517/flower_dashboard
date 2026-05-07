@@ -177,7 +177,9 @@ if "增量送花" in df_display.columns:
     display_cols.append("增量送花")
 
 # 关键：index=False 去掉左侧默认的0,1,2...列
-st.dataframe(df_display[display_cols], use_container_width=True, height=400, index=False)
+# 使用 HTML 表格隐藏行索引（兼容所有 Streamlit 版本）
+html_table = df_display[display_cols].to_html(index=False)
+st.markdown(html_table, unsafe_allow_html=True)
 
 # ==================== 折线图 ====================
 st.subheader("📈 近7日送花趋势（所有明星）")
