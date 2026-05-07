@@ -7,40 +7,31 @@ import plotly.graph_objects as go
 
 # ==================== 配置 ====================
 AUTO_REFRESH_SECONDS = 30   # 自动刷新间隔（秒）
-CACHE_TTL_SECONDS = 25
-# =============================================
+CACHE_TTL_SECONDS = 25      # 数据缓存时长
+API_URL = "http://47.109.181.0/api/data"
 
+# ==================== 页面设置 ====================
 st.set_page_config(page_title="送花数据分析看板", page_icon="🌸", layout="wide")
 st.markdown(f'<meta http-equiv="refresh" content="{AUTO_REFRESH_SECONDS}">', unsafe_allow_html=True)
 
-# ==================== 水印 ====================
+# ==================== 全屏水印 ====================
 watermark_text = "陈浚铭四代第一门面"
-watermark_css = f"""
+watermark_html = f"""
 <style>
 .watermark-layer {{
     position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    z-index: 9999;
+    top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 9999;
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(220px, 260px));
-    justify-content: center;
-    align-items: center;
-    opacity: 0.22;
-    transform: rotate(-20deg);
+    justify-content: center; align-items: center;
+    opacity: 0.22; transform: rotate(-20deg);
 }}
 .watermark-item {{
-    font-size: 22px;
-    font-weight: bold;
-    color: #aaa;
+    font-size: 22px; font-weight: bold; color: #aaa;
     font-family: 'Microsoft YaHei', sans-serif;
-    white-space: nowrap;
-    text-align: center;
-    padding: 30px 0;
-    user-select: none;
+    white-space: nowrap; text-align: center;
+    padding: 30px 0; user-select: none;
 }}
 </style>
 <div class="watermark-layer"></div>
@@ -48,8 +39,7 @@ watermark_css = f"""
     (function() {{
         const layer = document.querySelector('.watermark-layer');
         if (!layer) return;
-        const itemWidth = 240;
-        const itemHeight = 80;
+        const itemWidth = 240, itemHeight = 80;
         const cols = Math.ceil(window.innerWidth / itemWidth) + 1;
         const rows = Math.ceil(window.innerHeight / itemHeight) + 1;
         const total = cols * rows;
@@ -62,16 +52,16 @@ watermark_css = f"""
     }})();
 </script>
 """
-st.markdown(watermark_css, unsafe_allow_html=True)
+st.markdown(watermark_html, unsafe_allow_html=True)
 
-# 颜色映射
+# ==================== 颜色映射 ====================
 COLOR_MAP = {
     "王橹杰": "#06B6D4", "张函瑞": "#10B981", "张桂源": "#F59E0B",
     "杨博文": "#EC4899", "左奇函": "#3B82F6", "陈奕恒": "#8B5CF6", "陈浚铭": "#EF4444"
 }
 DEFAULT_COLOR = "#888888"
-API_URL = "http://47.109.181.0/api/data"
 
+# ==================== 数据预处理工具 ====================
 def smart_find_list(obj):
     if isinstance(obj, list):
         return obj
@@ -112,20 +102,19 @@ def auto_map_columns(df):
         for col in df.columns:
             if col in used_cols:
                 continue
-            col_lower = col.lower()
-            if any(kw in col_lower for kw in keywords):
+            if any(kw in col.lower() for kw in keywords):
                 rename_dict[col] = std_name
                 used_cols.add(col)
                 break
-    df_renamed = df.rename(columns=rename_dict)
-    for std_name in mapping_rules.keys():
-        if std_name in df_renamed.columns:
-            matching = [c for c in df_renamed.columns if c == std_name]
-            if len(matching) > 1:
-                keep_cols = [matching[0]] + [c for c in df_renamed.columns if c not in matching[1:]]
-                df_renamed = df_renamed[keep_cols]
-    return df_renamed
+    df = df.rename(columns=rename_dict)
+    # 去重列名
+    for std_name in mapping_rules:
+        cols = [c for c in df.columns if c == std_name]
+        if len(cols) > 1:
+            df = df[[cols[0]] + [c for c in df.columns if c != cols[0]]]
+    return df
 
+# ==================== 数据加载（缓存） ====================
 @st.cache_data(ttl=CACHE_TTL_SECONDS)
 def load_data():
     try:
@@ -144,148 +133,132 @@ def load_data():
         if df.empty:
             raise ValueError("列表为空")
         df = auto_map_columns(df)
+        # 确保必要列存在
         if "姓名" not in df.columns:
             df["姓名"] = [f"明星{i}" for i in range(len(df))]
-        if "今日送花" not in df.columns:
-            num_cols = df.select_dtypes(include=['number']).columns
-            df["今日送花"] = df[num_cols[0]] if len(num_cols) > 0 else 0
-        if "今日总人数" not in df.columns:
-            df["今日总人数"] = 0
-        df["今日送花"] = pd.to_numeric(df["今日送花"], errors='coerce').fillna(0)
-        df["今日总人数"] = pd.to_numeric(df["今日总人数"], errors='coerce').fillna(0)
-        if "今日增量人数" in df.columns:
-            df["今日增量人数"] = pd.to_numeric(df["今日增量人数"], errors='coerce').fillna(0)
-        if "今日增量送花" in df.columns:
-            df["今日增量送花"] = pd.to_numeric(df["今日增量送花"], errors='coerce').fillna(0)
+        for col in ["今日送花", "今日总人数", "历史总数", "今日增量送花", "今日增量人数"]:
+            if col not in df.columns:
+                df[col] = 0
+        # 数值化
+        for col in ["今日送花", "今日总人数", "历史总数", "今日增量送花", "今日增量人数"]:
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
+        # 计算人均
         df["人均送花"] = df.apply(lambda row: round(row["今日送花"] / row["今日总人数"], 2) if row["今日总人数"] > 0 else 0, axis=1)
         df = df.sort_values("今日送花", ascending=False).reset_index(drop=True)
         return df, data_time, time_source, None
     except Exception as e:
         return pd.DataFrame(), None, None, str(e)
 
-# ==================== 界面 ====================
+# ==================== 页面渲染 ====================
 st.title("🌸 百度送花数据实时看板")
-st.caption(f"缓存：{CACHE_TTL_SECONDS}秒 | 自动刷新：{AUTO_REFRESH_SECONDS}秒 | 全屏水印：“{watermark_text}”")
+st.caption(f"缓存：{CACHE_TTL_SECONDS}秒 | 自动刷新：{AUTO_REFRESH_SECONDS}秒 | 水印：“{watermark_text}”")
 
 with st.spinner("加载中..."):
     df, data_time, time_source, error = load_data()
 
 if error:
-    st.error(f"数据加载失败：{error}")
+    st.error(f"❌ 数据加载失败：{error}")
     st.stop()
 if df.empty:
-    st.warning("未获取到有效数据")
+    st.warning("⚠️ 未获取到有效数据")
     st.stop()
 
+# 显示更新时间
 if data_time:
-    if time_source == "api":
-        st.info(f"📅 数据最后更新时间（接口提供）：{data_time.strftime('%Y-%m-%d %H:%M:%S')}")
-    else:
-        st.info(f"📅 数据获取时间（本地）：{data_time.strftime('%Y-%m-%d %H:%M:%S')}")
+    label = "📅 数据最后更新时间（接口提供）" if time_source == "api" else "📅 数据获取时间（本地）"
+    st.info(f"{label}：{data_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
-# ==================== 表格（完全复现图示样式） ====================
+# ==================== 排行榜表格（严格按期望样式） ====================
 st.subheader("🏆 送花排行榜")
 
-def format_number(n):
-    """将数字格式化为带千位分隔符的字符串"""
-    try:
-        return f"{int(n):,}"
-    except:
-        return str(n)
+def fmt(n):
+    """千位分隔整数"""
+    return f"{int(n):,}"
 
-# 构建表格 HTML（已修正所有标签错误）
-table_html = """
+# 构建完全正确的 HTML 表格
+table_rows = ""
+for _, row in df.iterrows():
+    name = row["姓名"]
+    today = fmt(row["今日送花"])
+    people = fmt(row["今日总人数"])
+    avg = row["人均送花"]
+    total = fmt(row["历史总数"])
+    d_gift = fmt(row["今日增量送花"])
+    d_people = fmt(row["今日增量人数"])
+
+    # 主行
+    table_rows += f"""
+        <tr class="main-row">
+            <td>{name}</td>
+            <td>{today}</td>
+            <td>{people}</td>
+            <td>{avg}</td>
+        </tr>"""
+    # 子行
+    table_rows += f"""
+        <tr class="sub-row">
+            <td>📜 历史总数 {total}</td>
+            <td><span class="delta">^ {d_gift}</span></td>
+            <td><span class="delta">^ {d_people}</span></td>
+            <td></td>
+        </tr>"""
+
+rank_table_html = f"""
 <style>
-.rank-table {
+.rank-table {{
     width: 100%;
     border-collapse: collapse;
     font-family: 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
     font-size: 15px;
-}
-.rank-table th, .rank-table td {
+}}
+.rank-table th, .rank-table td {{
     border: 1px solid #d1d5db;
     padding: 10px 8px;
     text-align: left;
-    vertical-align: top;
-}
-.rank-table th {
+    vertical-align: middle;
+}}
+.rank-table th {{
     background-color: #f3f4f6;
     font-weight: 600;
     color: #111827;
-}
-.rank-table .main-row td {
+}}
+.rank-table .main-row td {{
     background-color: #ffffff;
     font-weight: 500;
-}
-.rank-table .sub-row td {
+}}
+.rank-table .sub-row td {{
     background-color: #f9fafb;
     font-size: 13px;
     color: #4b5563;
-}
-.rank-table .sub-row td:first-child {
-    font-weight: normal;
-}
-.rank-table .delta {
+}}
+.rank-table .delta {{
     color: #3b82f6;
-    font-weight: 500;
-}
-@media (max-width: 600px) {
-    .rank-table th, .rank-table td {
+    font-weight: 600;
+}}
+@media (max-width: 600px) {{
+    .rank-table th, .rank-table td {{
         padding: 6px 4px;
         font-size: 13px;
-    }
-    .rank-table .sub-row td {
+    }}
+    .rank-table .sub-row td {{
         font-size: 11px;
-    }
-}
+    }}
+}}
 </style>
 <table class="rank-table">
     <thead>
         <tr><th>名称</th><th>今日送花</th><th>今日人数</th><th>人均</th></tr>
     </thead>
     <tbody>
-"""
-
-for _, row in df.iterrows():
-    name = row["姓名"]
-    today = format_number(row["今日送花"])
-    people = format_number(row["今日总人数"])
-    avg = row["人均送花"]
-    
-    # 处理可能缺失的列
-    total_history = format_number(row["历史总数"]) if "历史总数" in row and pd.notna(row["历史总数"]) else "0"
-    delta_gift = format_number(row["今日增量送花"]) if "今日增量送花" in row and pd.notna(row["今日增量送花"]) else "0"
-    delta_people = format_number(row["今日增量人数"]) if "今日增量人数" in row and pd.notna(row["今日增量人数"]) else "0"
-
-    # 主行（已修正：去除错误的 。”</tr>）
-    table_html += f"""
-        <tr class="main-row">
-            <td>{name}</td>
-            <td>{today}</td>
-            <td>{people}</td>
-            <td>{avg}</td>
-        </tr>
-    """
-    # 副行（已修正：使用正确的闭合标签 </tr>）
-    table_html += f"""
-        <tr class="sub-row">
-            <td>📜 历史总数 {total_history}</td>
-            <td><span class="delta">^ {delta_gift}</span></td>
-            <td><span class="delta">^ {delta_people}</span></td>
-            <td></td>
-        </tr>
-    """
-
-table_html += """
+        {table_rows}
     </tbody>
 </table>
 """
-st.markdown(table_html, unsafe_allow_html=True)
+st.markdown(rank_table_html, unsafe_allow_html=True)
 
-# ==================== 折线图 ====================
+# ==================== 趋势折线图 ====================
 st.subheader("📈 近7日送花趋势对比")
 trend_col = "趋势" if "趋势" in df.columns else ("trend" if "trend" in df.columns else None)
-
 if trend_col:
     trend_data = []
     for _, row in df.iterrows():
@@ -308,21 +281,23 @@ if trend_col:
         all_dates = sorted(trend_df["日期"].unique())
         fig = go.Figure()
         for name in trend_df["明星"].unique():
-            subset = trend_df[trend_df["明星"] == name].sort_values("日期")
+            subset = trend_df[trend_df["明星"] == name]
             color = COLOR_MAP.get(name, DEFAULT_COLOR)
             fig.add_trace(go.Scatter(
-                x=subset["日期"],
-                y=subset["送花数量"],
-                mode='lines+markers',
-                name=name,
+                x=subset["日期"], y=subset["送花数量"],
+                mode='lines+markers', name=name,
                 line=dict(color=color, width=2),
                 marker=dict(size=4)
             ))
-        fig.update_xaxes(tickvals=all_dates, ticktext=all_dates, tickangle=0, fixedrange=True, showgrid=True, gridcolor='lightgray')
+        fig.update_xaxes(tickvals=all_dates, ticktext=all_dates, tickangle=0,
+                         fixedrange=True, showgrid=True, gridcolor='lightgray')
         fig.update_yaxes(fixedrange=True, showgrid=True, gridcolor='lightgray')
         fig.update_layout(
             autosize=True, margin=dict(l=20, r=20, t=40, b=40),
-            legend=dict(bgcolor='rgba(0,0,0,0)', bordercolor='rgba(0,0,0,0)', title=None, font=dict(color='black', size=10), orientation='h', yanchor='bottom', y=1.02, xanchor='center', x=0.5),
+            legend=dict(bgcolor='rgba(0,0,0,0)', bordercolor='rgba(0,0,0,0)',
+                        title=None, font=dict(color='black', size=10),
+                        orientation='h', yanchor='bottom', y=1.02,
+                        xanchor='center', x=0.5),
             xaxis_title="日期", yaxis_title="送花数量",
             plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)'
         )
@@ -334,8 +309,8 @@ else:
     st.info("当前数据不含趋势字段")
 
 # ==================== 柱状图 ====================
-st.subheader("📊 今日送花排行柱状图（按送花数量排序）")
-df_chart = df.sort_values("今日送花", ascending=False).reset_index(drop=True)
+st.subheader("📊 今日送花排行柱状图")
+df_chart = df.sort_values("今日送花", ascending=False)
 bar_colors = [COLOR_MAP.get(name, DEFAULT_COLOR) for name in df_chart["姓名"]]
 fig_width = max(8, len(df_chart) * 0.6)
 fig, ax = plt.subplots(figsize=(fig_width, 6))
